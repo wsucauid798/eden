@@ -1,0 +1,62 @@
+name: Sync backlog to Project
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '_docs/_development/**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sync-backlog
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure Project and PROJECT_NUMBER exist
+        id: bootstrap
+        env:
+          # PROJECTS_TOKEN must be a PAT with `repo` + `project` scopes.
+          # This is the single manual setup step — GitHub requires a human
+          # to generate and store it.
+          GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+          EXISTING_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$EXISTING_NUMBER" ]]; then
+            echo "PROJECT_NUMBER already set: $EXISTING_NUMBER"
+            echo "number=$EXISTING_NUMBER" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          OWNER="${REPO%%/*}"
+          echo "No PROJECT_NUMBER — creating 'Eden' Project under $OWNER"
+          N=$(gh project create --title "Eden" --owner "$OWNER" \
+                --format json | jq -r '.number')
+          echo "Created Project #$N"
+
+          gh variable set PROJECT_NUMBER --body "$N" --repo "$REPO"
+          echo "number=$N" >> "$GITHUB_OUTPUT"
+
+      - name: Sync backlog to issues + Project
+        env:
+          GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+          PROJECT_NUMBER: ${{ steps.bootstrap.outputs.number }}
+        run: |
+          chmod +x _dev/scripts/sync-backlog.sh
+          shopt -s nullglob
+          files=(_docs/_development/*.md)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "no backlog files found under _docs/_development/"
+            exit 0
+          fi
+          ./_dev/scripts/sync-backlog.sh "${files[@]}"
