@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install libgdiplus (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgdiplus libc6-dev
+
+      - name: Run prebuild (Linux)
+        if: runner.os == 'Linux'
+        run: ./runprebuild.sh
+
+      - name: Run prebuild (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: runprebuild.bat
+
+      - name: Build
+        run: dotnet build eden.sln --configuration Release --nologo
+
+      - name: Test
+        continue-on-error: true
+        run: dotnet test eden.sln --configuration Release --no-build --nologo --logger "console;verbosity=minimal"
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.os }}
+          path: |
+            **/*.binlog
+            **/msbuild.log
+          if-no-files-found: ignore

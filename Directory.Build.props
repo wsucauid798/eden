@@ -1,0 +1,16 @@
+<Project>
+
+  <!--
+    Applies to every .csproj under this directory tree. MSBuild auto-imports it
+    without any Prebuild or .csproj changes. Put Eden-wide build settings here.
+  -->
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>
