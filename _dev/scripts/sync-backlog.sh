@@ -40,7 +40,11 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
-OWNER="${OWNER:-${REPO%%/*}}"
+# Default to the authenticated PAT user. Deriving from the repo owner's login
+# fails with "unknown owner type" when gh cannot resolve the login via the
+# GraphQL typename query (common for user accounts). Override explicitly if
+# the project lives under a different user or organisation.
+OWNER="${OWNER:-@me}"
 DRY_RUN="${DRY_RUN:-0}"
 
 slugify() {
