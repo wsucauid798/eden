@@ -21,6 +21,13 @@ Working list of concrete tasks. Ticking order is rough — phase gates are in
 - [ ] Verify CI passes on first push
 - [ ] Triage whether existing NUnit tests pass; mark broken ones for later
 - [ ] Decide what to do with root `eden.sln` stub (collides with Prebuild-emitted `Eden.sln`)
+- [ ] Add `.github/PULL_REQUEST_TEMPLATE.md`
+- [ ] Add `.github/ISSUE_TEMPLATE/` with bug / feature / chore templates
+- [ ] Add `CODEOWNERS` file
+- [ ] Add `dependabot.yml` covering `nuget` and `github-actions` ecosystems
+- [ ] Add `CHANGELOG.md` following Keep-a-Changelog conventions
+- [ ] Decide commit message convention (Conventional Commits vs free-form) and document it
+- [ ] Configure branch protection rules on default branch (document in a note; apply in GH UI)
 
 ---
 
@@ -58,6 +65,11 @@ what stops compiling, then delete the fallout."
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
 - [ ] Migrate MySQL.Data to MySqlConnector
 - [ ] Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`
+- [ ] Pin monorepo layout — where `Eden.Shared`, `Eden.Server`, `Eden.Viewer` live relative to the surviving `Eden/` tree
+- [ ] Decide central package management (`Directory.Packages.props`) vs per-project `PackageReference`
+- [ ] Pick DI container — default to `Microsoft.Extensions.DependencyInjection` unless reason not to
+- [ ] Define wire protocol versioning scheme from day 1 (e.g. path-based `/v1/…`)
+- [ ] Add health-check / liveness endpoint to the server host
 
 ---
 
@@ -69,6 +81,9 @@ what stops compiling, then delete the fallout."
 - [ ] Physics re-integration against Bullet
 - [ ] Asset / inventory / user services exposed over new wire protocol
 - [ ] Integration tests that spin up a server and hit endpoints
+- [ ] Lock the scripting API shape with a worked sample in `_docs/_design/` (`async Task OnTouch(Avatar who)`, etc.)
+- [ ] Enumerate the script event surface (touch, collision, timer, money, sensor, link_message, …)
+- [ ] Choose region persistence format (JSON, custom binary, SQLite rows)
 
 ---
 
@@ -80,6 +95,9 @@ what stops compiling, then delete the fallout."
 - [ ] Input and camera
 - [ ] Minimal UI: chat, inventory, minimap, settings
 - [ ] Asset streaming and caching
+- [ ] Choose asset formats — glTF for meshes, Opus for audio, format for avatars
+- [ ] Input rebinding UI and gamepad support
+- [ ] Accessibility pass — keyboard-only navigation, screen-reader hooks, high-contrast theme
 
 ---
 
@@ -91,6 +109,11 @@ what stops compiling, then delete the fallout."
 - [ ] macOS `.dmg` (notarised)
 - [ ] Linux AppImage
 - [ ] Self-contained `dotnet publish` in CI
+- [ ] Procure Windows code-signing certificate (EV, ~£200/yr)
+- [ ] Enrol in Apple Developer Program ($99/yr) for macOS notarisation
+- [ ] Auto-update mechanism — pick between Sparkle / Velopack / custom
+- [ ] Crash reporting pipeline (self-hosted Sentry or file-based dumps)
+- [ ] Telemetry policy — opt-in, decide what's collected and document in app
 
 ---
 
@@ -101,6 +124,10 @@ what stops compiling, then delete the fallout."
 - [ ] Optional OAR/IAR import tool
 - [ ] Public docs site
 - [ ] Federation story (multi-region, multi-server)
+- [ ] Write `SECURITY.md` with disclosure policy
+- [ ] Rate limiting on server endpoints
+- [ ] Content moderation tooling (report, mute, eject, land ban)
+- [ ] Data-protection notes (GDPR basics if hosting publicly)
 
 ---
 
@@ -127,6 +154,26 @@ These gate Phase 2. See [plan.md](../_design/plan.md) for context.
 - [ ] Script sandboxing model — trust / process isolation / WASM
 - [ ] Wire protocol — WebSocket+MessagePack vs WebTransport/QUIC
 - [ ] Content portability — fresh start vs import converters
+
+---
+
+## Cross-cutting / tooling
+
+- [ ] Release workflow: tag → build → upload per-OS artefacts
+- [ ] Nightly build pipeline
+- [ ] Container image + `docker-compose.yml` for quick local runs
+- [ ] Performance baseline / benchmark harness
+- [ ] Load test rig (simulated avatar bot pool)
+
+---
+
+## Product / brand
+
+- [ ] Domain name
+- [ ] Logo
+- [ ] App icon
+- [ ] Website (at minimum a one-pager)
+- [ ] Community channel — Discord / Matrix / forum
 
 ---
 
