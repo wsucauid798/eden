@@ -2,9 +2,9 @@ name: Sync backlog to Project
 
 on:
   push:
-    branches: [main]
     paths:
-      - '_docs/_development/**.md'
+      - '_docs/_development/**/*.md'
+      - '_docs/_development/*.md'
   workflow_dispatch:
 
 permissions:
@@ -38,9 +38,11 @@ jobs:
             exit 0
           fi
 
-          OWNER="${REPO%%/*}"
-          echo "No PROJECT_NUMBER — creating 'Eden' Project under $OWNER"
-          N=$(gh project create --title "Eden" --owner "$OWNER" \
+          # Use @me (the authenticated PAT user) rather than deriving from
+          # the repo owner — gh can't always resolve external handles to
+          # User/Organization type, producing "unknown owner type".
+          echo "No PROJECT_NUMBER — creating 'Eden' Project under @me"
+          N=$(gh project create --title "Eden" --owner "@me" \
                 --format json | jq -r '.number')
           echo "Created Project #$N"
 
