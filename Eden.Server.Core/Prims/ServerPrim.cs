@@ -2,6 +2,7 @@ using Eden.Scripting.Host;
 using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
+using JoltPhysicsSharp;
 
 namespace Eden.Server.Core.Prims;
 
@@ -53,6 +54,12 @@ internal sealed class ServerPrim(EdenId<PrimTag> id, EdenId<UserTag> ownerId)
     }
 
     public BehaviorHandle? Behavior { get; set; }
+
+    /// <summary>The Jolt body ID backing this prim. <c>null</c> until the
+    /// prim is registered with the physics world (currently all spawns
+    /// register a body; kept nullable to leave room for phantom/no-physics
+    /// prims later).</summary>
+    public BodyID? BodyId { get; set; }
 
     public PrimState ToPrimState()
     {

@@ -255,6 +255,7 @@ public sealed class SoloHandle : IAsyncDisposable
             try { await _primaryViewerSide.DisposeAsync().ConfigureAwait(false); } catch { }
         foreach (var (_, loop) in _attached)
             try { await loop.ConfigureAwait(false); } catch (OperationCanceledException) { }
+        await Server.DisposeAsync().ConfigureAwait(false);
         _cts.Dispose();
     }
 }
@@ -313,6 +314,7 @@ public sealed class HostHandle : IAsyncDisposable
         try { await _hostServerSide.DisposeAsync().ConfigureAwait(false); } catch { }
         try { await _acceptTask.ConfigureAwait(false); } catch (OperationCanceledException) { }
         try { await _hostLoop.ConfigureAwait(false); }    catch (OperationCanceledException) { }
+        await Server.DisposeAsync().ConfigureAwait(false);
         _cert.Dispose();
         _cts.Dispose();
     }

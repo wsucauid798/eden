@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Eden.Scripting;
 using Eden.Scripting.Host;
+using Eden.Server.Core.Physics;
 using Eden.Server.Core.Prims;
 using Eden.Shared;
 using Eden.Shared.Entities;
@@ -9,6 +10,7 @@ using Eden.Shared.Math;
 using Eden.Shared.Transport;
 using Eden.Shared.Wire;
 using Eden.Shared.Wire.Messages;
+using JoltPhysicsSharp;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -21,17 +23,25 @@ namespace Eden.Server.Core;
 /// the server fans out to every session via <see cref="BroadcastAsync"/>
 /// and <see cref="BroadcastExceptAsync"/>.
 /// </summary>
-public sealed class EdenServer
+public sealed class EdenServer : IAsyncDisposable
 {
+    /// <summary>Fixed physics step. 60 Hz. Jolt is happiest with a fixed
+    /// <c>dt</c>; caller's wall-clock drift is absorbed by the timer.</summary>
+    private static readonly TimeSpan PhysicsStep = TimeSpan.FromMilliseconds(1000.0 / 60.0);
+
     private readonly EdenId<WorldTag> _worldId;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<EdenServer> _logger;
     private readonly DateTime _startedUtc = DateTime.UtcNow;
     private readonly BehaviorHost _behaviorHost;
     private readonly IWorldContext _worldContext = new ServerWorldContext();
+    private readonly PhysicsWorld _physics;
+    private readonly CancellationTokenSource _shutdownCts = new();
+    private readonly Task _physicsLoop;
     private readonly ConcurrentDictionary<EdenId<SessionTag>, ClientSession> _sessions = new();
     private readonly ConcurrentDictionary<EdenId<UserTag>,    AvatarState>   _avatars  = new();
     private readonly ConcurrentDictionary<EdenId<PrimTag>,    ServerPrim>    _prims    = new();
+    private int _disposed;
 
     public EdenServer(EdenId<WorldTag> worldId, ILoggerFactory? loggerFactory = null)
     {
@@ -39,36 +49,69 @@ public sealed class EdenServer
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger        = _loggerFactory.CreateLogger<EdenServer>();
         _behaviorHost  = new BehaviorHost(_loggerFactory);
+        _physics       = new PhysicsWorld(_loggerFactory.CreateLogger<PhysicsWorld>());
+        _physicsLoop   = Task.Run(() => PhysicsLoopAsync(_shutdownCts.Token));
     }
 
     public int SessionCount => _sessions.Count;
     public int AvatarCount  => _avatars.Count;
     public int PrimCount    => _prims.Count;
 
-    /// <summary>Create a new prim in the world registry with the given
-    /// behavior attached. Returns the prim's id and the behavior handle —
-    /// disposing the handle detaches the behavior (the prim itself stays).
-    /// Owner is the world (zero <see cref="EdenId{UserTag}"/>) until a real
-    /// ownership model lands.</summary>
+    /// <summary>Create a new prim in the world registry. <see cref="PrimFlags.Physical"/>
+    /// makes the body dynamic (falls, collides, has velocity); otherwise static.
+    /// Optional <paramref name="behavior"/> is attached at the same time and its
+    /// handle is returned (null if no behavior was provided).</summary>
+    public async Task<(EdenId<PrimTag> PrimId, BehaviorHandle? Handle)> SpawnPrimAsync(
+        Transform          pose,
+        Vector3            scale,
+        PrimFlags          flags,
+        EdenBehavior?      behavior = null,
+        CancellationToken  ct = default)
+    {
+        var primId = EdenId<PrimTag>.New();
+        var prim   = new ServerPrim(primId, EdenId<UserTag>.Empty)
+        {
+            Pose  = pose,
+            Scale = scale,
+            Flags = flags,
+        };
+
+        // Register a box body sized by Scale (half-extent = scale / 2).
+        var motion = flags.HasFlag(PrimFlags.Physical) ? MotionType.Dynamic : MotionType.Static;
+        prim.BodyId = _physics.AddBox(
+            center:     pose.Position,
+            halfExtent: scale * 0.5f,
+            rotation:   pose.Rotation,
+            motion:     motion);
+
+        _prims[primId] = prim;
+
+        BehaviorHandle? handle = null;
+        if (behavior is not null)
+        {
+            var self = new ServerSelfContext(prim, BroadcastPrimUpdateAsync);
+            handle = await _behaviorHost.AttachAsync(behavior, self, _worldContext, ct)
+                .ConfigureAwait(false);
+            prim.Behavior = handle;
+        }
+
+        await BroadcastPrimUpdateAsync(prim.ToPrimState()).ConfigureAwait(false);
+
+        _logger.LogInformation("Spawned prim {PrimId} ({Motion}){Behavior}",
+            primId, motion, behavior is null ? "" : $" with behavior {behavior.GetType().Name}");
+        return (primId, handle);
+    }
+
+    /// <summary>Back-compat helper: spawn a static unit-scale prim at the
+    /// origin with a behavior. New callers should prefer <see cref="SpawnPrimAsync"/>.</summary>
     public async Task<(EdenId<PrimTag> PrimId, BehaviorHandle Handle)> SpawnPrimWithBehaviorAsync(
         EdenBehavior       behavior,
         CancellationToken  ct = default)
     {
-        var primId = EdenId<PrimTag>.New();
-        var prim   = new ServerPrim(primId, EdenId<UserTag>.Empty);
-        _prims[primId] = prim;
-
-        var self   = new ServerSelfContext(prim, BroadcastPrimUpdateAsync);
-        var handle = await _behaviorHost.AttachAsync(behavior, self, _worldContext, ct)
+        var (id, handle) = await SpawnPrimAsync(
+            Transform.Identity, Vector3.One, PrimFlags.None, behavior, ct)
             .ConfigureAwait(false);
-        prim.Behavior = handle;
-
-        // Tell every connected viewer this prim exists in its initial state.
-        await BroadcastPrimUpdateAsync(prim.ToPrimState()).ConfigureAwait(false);
-
-        _logger.LogInformation("Spawned prim {PrimId} with behavior {Behavior}",
-            primId, behavior.GetType().Name);
-        return (primId, handle);
+        return (id, handle!);
     }
 
     private Task BroadcastPrimUpdateAsync(PrimState state) =>
@@ -309,6 +352,69 @@ public sealed class EdenServer
         {
             _logger.LogWarning(ex, "AvatarLeft broadcast failed for user {UserId}", session.UserId);
         }
+    }
+
+    private async Task PhysicsLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(PhysicsStep);
+        var dt = (float)PhysicsStep.TotalSeconds;
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+            {
+                _physics.Step(dt);
+                await SyncDynamicPrimsAsync(ct).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) { /* shutdown */ }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Physics loop crashed");
+        }
+    }
+
+    private async Task SyncDynamicPrimsAsync(CancellationToken ct)
+    {
+        foreach (var prim in _prims.Values)
+        {
+            if (!prim.Flags.HasFlag(PrimFlags.Physical) || prim.BodyId is not { } bodyId)
+                continue;
+
+            var newPose = _physics.GetTransform(bodyId);
+            if (newPose == prim.Pose) continue; // bit-exact no-op
+
+            prim.Pose = newPose;
+            try
+            {
+                await BroadcastAsync(MessageKind.PrimUpdate, new PrimUpdate(prim.ToPrimState()), ct)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "PrimUpdate broadcast failed for prim {PrimId}", prim.Id);
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        _shutdownCts.Cancel();
+        try { await _physicsLoop.ConfigureAwait(false); } catch (OperationCanceledException) { }
+
+        // Detach every attached behavior before tearing down the physics world
+        // so their OnDisable runs against a still-valid context.
+        foreach (var prim in _prims.Values)
+        {
+            if (prim.Behavior is { } b)
+                try { await b.DisposeAsync().ConfigureAwait(false); } catch { }
+        }
+
+        _physics.Dispose();
+        _shutdownCts.Dispose();
     }
 }
 
