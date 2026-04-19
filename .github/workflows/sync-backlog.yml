@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   issues: write
 
 concurrency:
@@ -91,16 +91,3 @@ jobs:
             exit 0
           fi
           ./_dev/scripts/sync-backlog.sh "${files[@]}"
-
-      - name: Commit embedded issue numbers back to backlog
-        run: |
-          if ! git diff --quiet -- _docs/_development/; then
-            git config user.name  "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add _docs/_development/
-            # [skip ci] prevents this commit from re-triggering this workflow.
-            git commit -m "sync: embed issue numbers in backlog [skip ci]"
-            git push
-          else
-            echo "no backlog changes to commit"
-          fi

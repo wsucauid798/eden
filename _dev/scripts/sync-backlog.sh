@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 #
-# One-way sync: backlog markdown -> GitHub Issues + Projects v2 board.
+# One-way, create-only sync: backlog markdown → GitHub Issues + Projects v2.
 #
-# What it does:
-#   - For each `- [ ]` line without `#NNN`: create the issue, insert
-#     `#NNN` into the line, add to the project.
-#   - For each `- [ ]` line with `#NNN`: ensure it's in the project.
-#   - For each `- [x]` line: **skip** — closure is the user's manual
-#     action on GitHub. The backlog being ticked is a local signal,
-#     nothing more.
+#   - For each `- [ ] text` line: if no issue with that exact title exists,
+#     create it and add it to the project.
+#   - For each `- [x] text` line: skip. Closure is manual on GitHub.
 #
-# Legacy lines without `#NNN` try a title prefix-match against existing
-# issues before creating, so prior issues get linked instead of duplicated.
+# No auto-closing, no backlog rewriting, no title embedding. Matching is by
+# exact title; re-runs against unchanged backlog are no-ops.
 #
 # Usage:
 #   PROJECT_NUMBER=<n> ./sync-backlog.sh <file.md> [<file.md> ...]
@@ -41,7 +37,6 @@ DRY_RUN="${DRY_RUN:-0}"
 
 issues_created=0
 project_added=0
-linked=0
 skipped=0
 failures=0
 
@@ -78,7 +73,7 @@ ensure_label() {
 
 echo "Loading existing issues from $REPO…"
 existing_issues_json="$(gh issue list --repo "$REPO" --state all --limit 1000 \
-                         --json title,url,number,state 2>/dev/null || echo '[]')"
+                         --json title,url 2>/dev/null || echo '[]')"
 
 echo "Loading existing project items from project #$PROJECT_NUMBER…"
 existing_project_json="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" \
@@ -87,34 +82,11 @@ existing_project_json="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER"
 existing_project_urls="$(jq -r '.items[]?.content.url // empty' \
                          <<<"$existing_project_json" | sort -u)"
 
-issue_url_by_number() {
-  local number="$1"
-  jq -r --argjson n "$number" \
-     'map(select(.number == $n) | .url) | .[0] // empty' \
-     <<<"$existing_issues_json"
-}
-
-issue_state_by_number() {
-  local number="$1"
-  jq -r --argjson n "$number" \
-     'map(select(.number == $n) | .state) | .[0] // empty' \
-     <<<"$existing_issues_json"
-}
-
-# Legacy migration path: find an issue by title prefix when the backlog
-# line doesn't yet have a #NNN.
-find_issue_number_by_title() {
+find_issue_url() {
   local title="$1"
-  local n
-  n=$(jq -r --arg t "$title" \
-       'map(select(.title == $t) | .number) | .[0] // empty' \
-       <<<"$existing_issues_json")
-  if [[ -z "$n" ]]; then
-    n=$(jq -r --arg t "$title" \
-         'map(select(.title | startswith($t)) | .number) | .[0] // empty' \
-         <<<"$existing_issues_json")
-  fi
-  echo "$n"
+  jq -r --arg t "$title" \
+     'map(select(.title == $t) | .url) | .[0] // empty' \
+     <<<"$existing_issues_json"
 }
 
 url_in_project() {
@@ -124,9 +96,9 @@ url_in_project() {
 }
 
 remember_issue() {
-  local number="$1" title="$2" url="$3" state="$4"
-  existing_issues_json="$(jq --argjson n "$number" --arg t "$title" --arg u "$url" --arg s "$state" \
-                           '. + [{number: $n, title: $t, url: $u, state: $s}]' \
+  local title="$1" url="$2"
+  existing_issues_json="$(jq --arg t "$title" --arg u "$url" \
+                           '. + [{title: $t, url: $u}]' \
                            <<<"$existing_issues_json")"
 }
 
@@ -135,58 +107,57 @@ remember_project_url() {
   existing_project_urls="$(printf '%s\n%s\n' "$existing_project_urls" "$url" | sort -u)"
 }
 
-# ---------- actions ----------
+# ---------- per-item work ----------
 
-create_issue() {
+sync_item() {
   local title="$1" phase="$2" file="$3"
-  local label body
+  local label url body
   label="$(slugify "$phase")"
   body="From [\`$file\`]($file) — **$phase**"
 
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "[dry-run] would create: $title"
-    echo "999999"  # fake number, caller handles dry-run
+  url="$(find_issue_url "$title")"
+
+  if [[ -z "$url" ]]; then
+    if [[ "$DRY_RUN" == "1" ]]; then
+      echo "[dry-run] would create issue: $title"
+      url="dry-run://$title"
+    else
+      ensure_label "$label"
+      if ! url=$(retry gh issue create --repo "$REPO" --title "$title" \
+                        ${label:+--label "$label"} --body "$body"); then
+        echo "FAIL create issue: $title" >&2
+        return 1
+      fi
+      echo "issue: $title -> $url"
+      remember_issue "$title" "$url"
+      issues_created=$((issues_created + 1))
+    fi
+  fi
+
+  if url_in_project "$url"; then
+    skipped=$((skipped + 1))
     return 0
   fi
 
-  ensure_label "$label"
-
-  local url
-  if ! url=$(retry gh issue create --repo "$REPO" --title "$title" \
-                    ${label:+--label "$label"} --body "$body"); then
-    return 1
-  fi
-
-  # Parse number out of the URL (https://github.com/owner/repo/issues/NNN).
-  local number="${url##*/}"
-  remember_issue "$number" "$title" "$url" "OPEN"
-  echo "$number"
-  return 0
-}
-
-add_to_project() {
-  local number="$1" title="$2"
-  local url; url="$(issue_url_by_number "$number")"
-  [[ -z "$url" ]] && return 1
-  if url_in_project "$url"; then return 0; fi
-
   if [[ "$DRY_RUN" == "1" ]]; then
-    echo "[dry-run] would add to project: #$number $title"
+    echo "[dry-run] would add to project: $title ($url)"
     return 0
   fi
 
   if ! retry gh project item-add "$PROJECT_NUMBER" \
                --owner "$OWNER" --url "$url" >/dev/null; then
+    echo "FAIL project-add: $title ($url)" >&2
     return 1
   fi
+
+  echo "project: $title"
   remember_project_url "$url"
+  project_added=$((project_added + 1))
   return 0
 }
 
-# ---------- per-file processing ----------
+# ---------- main loop ----------
 
-# Rewrites the file in-place, inserting `#NNN ` after the checkbox for any
-# newly-created issues. Writes back only if any lines changed.
 process_file() {
   local file="$1"
   if [[ ! -f "$file" ]]; then
@@ -195,88 +166,23 @@ process_file() {
   fi
 
   echo "=== $file ==="
-
-  local -a lines
-  mapfile -t lines < "$file"
-
   local current_phase=""
-  local file_changed=0
 
-  local i
-  for (( i = 0; i < ${#lines[@]}; i++ )); do
-    local line="${lines[$i]}"
-
-    # Track section headers (phase labels).
+  while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ ^##[[:space:]]+(.*)$ ]]; then
       current_phase="${BASH_REMATCH[1]}"
       continue
     fi
 
-    # Unchecked line: - [ ] [#NNN] title
-    if [[ "$line" =~ ^([[:space:]]*-[[:space:]]\[)[[:space:]](\][[:space:]]+)(.+)$ ]]; then
-      local prefix="${BASH_REMATCH[1]}"
-      local closer="${BASH_REMATCH[2]}"
-      local body="${BASH_REMATCH[3]}"
-      process_open_line "$i" "$prefix" "$closer" "$body" "$current_phase" "$file"
-      continue
-    fi
+    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[[[:space:]]\][[:space:]]+(.+)$ ]]; then
+      local title="${BASH_REMATCH[1]}"
+      title="${title%"${title##*[![:space:]]}"}"
 
-    # Checked line: skip — closure is manual on GitHub.
-    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[x\][[:space:]]+ ]]; then
-      skipped=$((skipped + 1))
-      continue
-    fi
-  done
-
-  if (( file_changed )); then
-    printf '%s\n' "${lines[@]}" > "$file"
-    echo "updated: $file (embedded issue numbers)"
-  fi
-}
-
-# Process an unchecked `- [ ]` line. Arguments:
-#   $1 index  $2 "- [ ["  $3 "] "  $4 body (may start with #NNN)  $5 phase  $6 file
-# Sets file_changed=1 and rewrites lines[$i] if we created an issue.
-process_open_line() {
-  local idx="$1" prefix="$2" closer="$3" body="$4" phase="$5" file="$6"
-
-  local number="" title="$body"
-  if [[ "$body" =~ ^#([0-9]+)[[:space:]]+(.*)$ ]]; then
-    number="${BASH_REMATCH[1]}"
-    title="${BASH_REMATCH[2]}"
-  fi
-
-  if [[ -z "$number" ]]; then
-    # No number yet — try title match first (migration), else create.
-    number="$(find_issue_number_by_title "$title")"
-    if [[ -z "$number" ]]; then
-      if ! number=$(create_issue "$title" "$phase" "$file"); then
-        echo "FAIL create: $title" >&2
+      if ! sync_item "$title" "$current_phase" "$file"; then
         failures=$((failures + 1))
-        return
       fi
-      issues_created=$((issues_created + 1))
-      echo "issue #$number: $title"
-    else
-      echo "link #$number: $title"
-      linked=$((linked + 1))
     fi
-    # Rewrite the line with #NNN embedded.
-    lines[$idx]="${prefix} ${closer}#${number} ${title}"
-    file_changed=1
-  fi
-
-  # Make sure issue is in the project.
-  if add_to_project "$number" "$title"; then
-    local url; url="$(issue_url_by_number "$number")"
-    if [[ -n "$url" ]] && ! url_in_project "$url"; then
-      echo "project: #$number $title"
-      project_added=$((project_added + 1))
-    fi
-  else
-    echo "FAIL project-add: #$number $title" >&2
-    failures=$((failures + 1))
-  fi
+  done < "$file"
 }
 
 for f in "$@"; do
@@ -284,6 +190,6 @@ for f in "$@"; do
 done
 
 echo
-echo "summary: issues_created=$issues_created linked=$linked project_added=$project_added skipped=$skipped failures=$failures"
+echo "summary: issues_created=$issues_created project_added=$project_added skipped=$skipped failures=$failures"
 
 [[ "$failures" -eq 0 ]]
