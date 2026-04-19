@@ -61,15 +61,11 @@ explicitly decided to be *no replacement*.
 - [ ] log4net — remove `ILog`-based logging calls (placeholder for Phase 2 replacement)
   - Replaced by: `Microsoft.Extensions.Logging` with Serilog sink (Phase 2).
   - Breaks: log output format, appender config, any external log scraping.
-- [ ] BinaryFormatter — delete usages in `Eden/Framework/Util.cs`
-  - Replaced by: explicit serialisation — `System.Text.Json` for interchange, MessagePack/protobuf where size/perf matters.
-  - Breaks: any persisted state that used it. Audit call sites before deleting — if it's only in-memory clone helpers, no replacement needed.
-- [ ] Thread.Abort / Thread.Suspend — delete from `Util.cs`, `DoubleDictionaryThreadAbortSafe.cs`
-  - Replaced by: `CancellationToken`-based cooperative cancellation.
-  - Breaks: anywhere scripts or long-running workers were aborted externally; all such call sites need a cooperative-shutdown rewrite.
-- [ ] AppDomain.CurrentDomain — delete from `Eden/Region/Application/Application.cs`
-  - Replaced by: nothing, or `AssemblyLoadContext` if we need runtime assembly isolation later (Phase 6 sandboxing may want this).
-  - Breaks: assembly-resolve hooks, if used.
+- [x] ~~BinaryFormatter — delete usages in `Eden/Framework/Util.cs`~~ **Done.** `SerializeToFile` / `DeserializeFromFile` methods plus the `System.Runtime.Serialization.Formatters.Binary` using directive removed. Audit found zero callers in the codebase — pure dead code, no replacement needed.
+- [x] ~~Thread.Abort / Thread.Suspend — delete from `Util.cs`, `DoubleDictionaryThreadAbortSafe.cs`~~ **Done.** Util.cs: the `Suspend/Resume` references were all inside a dead `/*…*/` block in `Util.GetStackTrace(Thread)`; method deleted, its one caller simplified. DoubleDictionaryThreadAbortSafe.cs: renamed to `DoubleDictionary`, file renamed, `Thread.Abort`-specific comments removed, callers (EntityManager, SceneManager) qualified to disambiguate from `OpenMetaverse.DoubleDictionary`.
+  - Still open: live `Thread.Abort()` in `Eden/Region/ScriptEngine/Shared/Api/Implementation/AsyncCommandManager.cs:206` — dies with the LSL frontend demolition item.
+- [x] ~~AppDomain.CurrentDomain — delete from `Eden/Region/Application/Application.cs`~~ **No change needed.** The one live usage is `AppDomain.CurrentDomain.UnhandledException += …`, which is still the canonical (and supported) way to catch unhandled exceptions in modern .NET. Only `AppDomain.CreateDomain` and sandboxing APIs were removed, none of which we use. Other hits in the tree are commented-out code in test files.
+  - Optional follow-up: also hook `TaskScheduler.UnobservedTaskException` to catch observed-but-unhandled task exceptions (modern best practice).
 - [ ] XMLRPC and legacy grid protocols — delete with LLUDP
   - Replaced by: new RPC protocol; no grid-interop with OpenSim grids.
   - Breaks: any inter-grid message. Confirmed non-goal per plan.md.
@@ -212,3 +208,5 @@ These gate Phase 2. See [plan.md](../_design/plan.md) for context.
 - [ ] Audit `ThirdParty/` — which vendored libs are actually used after demolition?
 - [ ] Move root `eden.sln` (Prebuild-only stub) under `Prebuild/` if keeping, else delete
 - [ ] Scrub dead NAnt references (old `.nant/` folders, etc.) if any remain
+- [ ] Rename `Watchdog.AbortThread` (in `Eden/Framework/Monitoring/Watchdog.cs`) — it no longer aborts, just untracks. Convert callers to cooperative cancellation at the same time.
+- [ ] Fix silent cert-missing failure in `Eden/Server/Base/HttpServerBase.cs` — prints "server can't start" then keeps going. Should `Environment.Exit(1)` or throw.

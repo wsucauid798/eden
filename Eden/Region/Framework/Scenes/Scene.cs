@@ -1579,13 +1579,6 @@ namespace OpenSim.Region.Framework.Scenes
 //int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
 //System.Diagnostics.Process proc = new System.Diagnostics.Process();
 //proc.EnableRaisingEvents=false;
-//proc.StartInfo.FileName = "/bin/kill";
-//proc.StartInfo.Arguments = "-QUIT " + pid.ToString();
-//proc.Start();
-//proc.WaitForExit();
-//Thread.Sleep(1000);
-//Environment.Exit(1);
-                //m_heartbeatThread.Abort();
                 Watchdog.AbortThread(m_heartbeatThread.ManagedThreadId);
                 m_heartbeatThread = null;
             }
