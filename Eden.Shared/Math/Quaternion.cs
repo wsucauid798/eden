@@ -9,6 +9,15 @@ public readonly record struct Quaternion(float X, float Y, float Z, float W)
 {
     public static readonly Quaternion Identity = new(0f, 0f, 0f, 1f);
 
+    /// <summary>Rotation of <paramref name="radians"/> about a unit
+    /// <paramref name="axis"/>. Caller must ensure the axis is unit-length.</summary>
+    public static Quaternion FromAxisAngle(Vector3 axis, float radians)
+    {
+        var half = radians * 0.5f;
+        var s    = MathF.Sin(half);
+        return new Quaternion(axis.X * s, axis.Y * s, axis.Z * s, MathF.Cos(half));
+    }
+
     public float LengthSquared => X * X + Y * Y + Z * Z + W * W;
     public float Length        => MathF.Sqrt(LengthSquared);
 

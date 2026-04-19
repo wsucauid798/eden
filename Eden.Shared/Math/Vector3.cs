@@ -7,8 +7,11 @@ namespace Eden.Shared.Math;
 /// </summary>
 public readonly record struct Vector3(float X, float Y, float Z)
 {
-    public static readonly Vector3 Zero = new(0f, 0f, 0f);
-    public static readonly Vector3 One  = new(1f, 1f, 1f);
+    public static readonly Vector3 Zero  = new(0f, 0f, 0f);
+    public static readonly Vector3 One   = new(1f, 1f, 1f);
+    public static readonly Vector3 UnitX = new(1f, 0f, 0f);
+    public static readonly Vector3 UnitY = new(0f, 1f, 0f);
+    public static readonly Vector3 UnitZ = new(0f, 0f, 1f);
 
     public static Vector3 operator +(Vector3 a, Vector3 b) => new(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
     public static Vector3 operator -(Vector3 a, Vector3 b) => new(a.X - b.X, a.Y - b.Y, a.Z - b.Z);

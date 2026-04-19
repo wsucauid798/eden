@@ -91,7 +91,7 @@ depended on that tree is now done by deletion.
 - [ ] Physics re-integration against Bullet
 - [ ] Asset / inventory / user services exposed over new wire protocol
 - [x] ~~Integration tests that spin up a server and hit endpoints~~ `Eden.Shared.Tests` covers handshake, multi-client avatar registry, broadcast + spoof-guard, QUIC end-to-end, ViewerClient mirror. 28 tests (1 pre-existing flake tracked separately).
-- [ ] Lock the scripting API shape with a worked sample in `_docs/_design/` (`async Task OnTouch(Avatar who)`, etc.)
+- [x] ~~Lock the scripting API shape with a worked sample in `_docs/_design/`~~ Design doc at `_docs/_design/scripting-model.md`; scaffolded `Eden.Scripting/` project with `EdenBehavior` + event/capability attributes + `ISelfContext`/`IWorldContext`. Sample behaviors (`DoorScript`, `VendingMachine`, `SerialDemo`) in `Eden.Shared.Tests/ScriptingSamplesCompileTest.cs` are a compile-check of the API — if the shape drifts, the build breaks.
 - [ ] Enumerate the script event surface (touch, collision, timer, money, sensor, link_message, …)
 - [ ] Choose region persistence format (JSON, custom binary, SQLite rows)
 
