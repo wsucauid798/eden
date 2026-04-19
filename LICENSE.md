@@ -1,6 +1,7 @@
 # BSD 3-Clause License
 
-Copyright © 2026 William Sawyerr. All rights reserved.
+Copyright © 2026 William Sawyerr.
+Copyright © 2007-2026 OpenSimulator Project Contributors.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -27,13 +28,3 @@ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
-
----
-
-## Attribution
-
-The initial Eden repository began as a fork of the OpenSimulator project
-in early 2026. Every file of OpenSimulator source was removed during the
-Phase 1→2 demolition (commits `1a89a60`→`cf33e95`). The current codebase
-contains no OpenSimulator code. OpenSimulator is BSD 3-Clause licensed;
-this acknowledgement is kept here for the record.
