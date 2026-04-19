@@ -1,6 +1,7 @@
 # BSD 3-Clause License
 
 Copyright © 2026 William Sawyerr.
+
 Copyright © 2007-2026 OpenSimulator Project Contributors.
 
 Redistribution and use in source and binary forms, with or without
