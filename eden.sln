@@ -127,6 +127,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartThreadPool", "ThirdPar
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Shared", "Eden.Shared\Eden.Shared.csproj", "{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Server", "Eden.Server\Eden.Server.csproj", "{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -893,6 +895,18 @@ Global
 		{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}.Release|x64.Build.0 = Release|Any CPU
 		{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}.Release|x86.ActiveCfg = Release|Any CPU
 		{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}.Release|x86.Build.0 = Release|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Debug|x64.Build.0 = Debug|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Debug|x86.Build.0 = Debug|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Release|x64.ActiveCfg = Release|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Release|x64.Build.0 = Release|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Release|x86.ActiveCfg = Release|Any CPU
+		{BC22F705-9C13-4E44-AA54-41C6A2EB6B0F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

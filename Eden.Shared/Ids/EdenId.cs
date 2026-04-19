@@ -23,5 +23,6 @@ public readonly struct UserTag    { }
 public readonly struct WorldTag   { }
 public readonly struct RegionTag  { }
 public readonly struct PrimTag    { }
-public readonly struct ItemTag    { }
+public readonly struct ItemTag    { }      // inventory items
+public readonly struct AssetTag   { }      // meshes, textures, sounds, etc.
 public readonly struct SessionTag { }
