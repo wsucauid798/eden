@@ -11,6 +11,12 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <ImplicitUsings>disable</ImplicitUsings>
+    <!--
+      CA1416 complains about System.Net.Quic being "platform-specific", but
+      its supported platforms (linux, macOS, windows) cover every target
+      Eden ships to. Suppressing globally.
+    -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
 </Project>
