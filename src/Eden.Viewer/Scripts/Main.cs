@@ -47,6 +47,7 @@ public partial class Main : Node3D
     private Node3D?         _pitchPivot;
     private Label?          _menuLabel;
     private Label?          _hudLabel;
+    private WorldRenderer?  _world;
 
     private readonly Dictionary<EdenId<UserTag>, RemoteAvatar> _remote          = new();
     private readonly ConcurrentQueue<AvatarState>              _pendingUpdates  = new();
@@ -165,6 +166,7 @@ public partial class Main : Node3D
         _client = new ViewerClient(transport);
         _client.AvatarUpdated += state  => _pendingUpdates.Enqueue(state);
         _client.AvatarLeft    += userId => _pendingLeaves.Enqueue(userId);
+        if (_world is not null) _world.Bind(_client);
 
         await _client.ConnectAsync(_displayName);
         GD.Print($"[Eden] connected. My UserId = {_client.MyUserId}");
@@ -207,11 +209,11 @@ public partial class Main : Node3D
 
     private void BuildScene()
     {
-        var light = new DirectionalLight3D
-        {
-            Rotation = new Vector3(-Mathf.Pi / 4f, -Mathf.Pi / 6f, 0f),
-        };
-        AddChild(light);
+        // WorldRenderer owns the sun + environment (sky, fog, ambient).
+        // Its state is driven by the server's world clock once we bind it
+        // to the ViewerClient in StartAsync.
+        _world = new WorldRenderer();
+        AddChild(_world);
 
         var floor = new MeshInstance3D
         {
