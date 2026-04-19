@@ -33,6 +33,19 @@ public sealed class BehaviorHandle : IAsyncDisposable
         Gate        = descriptor.SerializeHandlers ? new SemaphoreSlim(1, 1) : null;
     }
 
+    /// <summary>Fire matching handlers on <em>this</em> behavior only. Used
+    /// when an event targets a specific behavior (e.g. the prim that was
+    /// actually touched) rather than fanning out to every attached behavior.</summary>
+    public Task DispatchAsync(
+        Type                         attributeType,
+        object[]                     args,
+        Func<EventAttribute, bool>?  filter = null,
+        CancellationToken            ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(attributeType);
+        return BehaviorDispatch.InvokeAsync(this, attributeType, args, filter, ct);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;

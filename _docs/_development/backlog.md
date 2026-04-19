@@ -85,7 +85,7 @@ depended on that tree is now done by deletion.
 
 ## Phase 3 — Server rebuild
 
-- [ ] Scene graph running against new transport
+- [ ] Scene graph running against new transport — partial: server has a prim registry (`EdenServer._prims`), `SpawnPrimWithBehaviorAsync` attaches a behavior, `ClientTouchPrim` wire frame dispatches `[OnTouch]` onto the prim's behavior via `ServerSelfContext`. Full scene graph (children, parenting, visibility, prim broadcasts) is still TODO.
 - [x] ~~C# scripting API surface~~ `Eden.Scripting` — `EdenBehavior` + event/capability attributes + context interfaces. Samples in `Eden.Shared.Tests/ScriptingSamplesCompileTest.cs` are a compile-check.
 - [x] ~~Roslyn-based script host; trust-model sandbox initially~~ `Eden.Scripting.Host.BehaviorHost` — pre-compiled assembly loading (Roslyn-from-source deferred), reflection-based handler dispatch, lifecycle, error isolation. 10 host tests + DoorScript end-to-end integration. Trust model only; sandboxing deferred to Phase 6. `[OnChat(Channel=…)]` filter dispatch shipped — `RaiseChatAsync(…, channel)` convenience.
 - [ ] Physics re-integration against Bullet

@@ -105,6 +105,13 @@ public sealed class ViewerClient : IAsyncDisposable
     public Task SendAvatarUpdateAsync(AvatarState state, CancellationToken ct = default)
         => _transport.SendAsync(Envelope.Encode(MessageKind.AvatarUpdate, new AvatarUpdate(state)), ct).AsTask();
 
+    /// <summary>Tell the server this avatar touched the given prim. The
+    /// server dispatches to the prim's behavior (if any) — no reply.</summary>
+    public Task TouchPrimAsync(EdenId<PrimTag> primId, CancellationToken ct = default)
+        => _transport.SendAsync(
+            Envelope.Encode(MessageKind.ClientTouchPrim, new ClientTouchPrim(primId)),
+            ct).AsTask();
+
     private async Task ReceiveLoopAsync(CancellationToken ct)
     {
         try

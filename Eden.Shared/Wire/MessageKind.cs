@@ -21,6 +21,9 @@ public enum MessageKind : byte
     // --- Chat ---
     ChatMessage  = 20,
 
+    // --- Interaction (client → server) ---
+    ClientTouchPrim = 30,
+
     // --- Operational probes (pre-session, no handshake required) ---
     Healthcheck      = 200,
     HealthcheckReply = 201,

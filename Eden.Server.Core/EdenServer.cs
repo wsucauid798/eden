@@ -1,4 +1,7 @@
 using System.Collections.Concurrent;
+using Eden.Scripting;
+using Eden.Scripting.Host;
+using Eden.Server.Core.Prims;
 using Eden.Shared;
 using Eden.Shared.Entities;
 using Eden.Shared.Ids;
@@ -21,19 +24,55 @@ namespace Eden.Server.Core;
 public sealed class EdenServer
 {
     private readonly EdenId<WorldTag> _worldId;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<EdenServer> _logger;
     private readonly DateTime _startedUtc = DateTime.UtcNow;
+    private readonly BehaviorHost _behaviorHost;
+    private readonly IWorldContext _worldContext = new ServerWorldContext();
     private readonly ConcurrentDictionary<EdenId<SessionTag>, ClientSession> _sessions = new();
     private readonly ConcurrentDictionary<EdenId<UserTag>,    AvatarState>   _avatars  = new();
+    private readonly ConcurrentDictionary<EdenId<PrimTag>,    ServerPrim>    _prims    = new();
 
-    public EdenServer(EdenId<WorldTag> worldId, ILogger<EdenServer>? logger = null)
+    public EdenServer(EdenId<WorldTag> worldId, ILoggerFactory? loggerFactory = null)
     {
-        _worldId = worldId;
-        _logger  = logger ?? NullLogger<EdenServer>.Instance;
+        _worldId       = worldId;
+        _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+        _logger        = _loggerFactory.CreateLogger<EdenServer>();
+        _behaviorHost  = new BehaviorHost(_loggerFactory);
     }
 
     public int SessionCount => _sessions.Count;
     public int AvatarCount  => _avatars.Count;
+    public int PrimCount    => _prims.Count;
+
+    /// <summary>Create a new prim in the world registry with the given
+    /// behavior attached. Returns the prim's id and the behavior handle —
+    /// disposing the handle detaches the behavior (the prim itself stays).
+    /// Owner is the world (zero <see cref="EdenId{UserTag}"/>) until a real
+    /// ownership model lands.</summary>
+    public async Task<(EdenId<PrimTag> PrimId, BehaviorHandle Handle)> SpawnPrimWithBehaviorAsync(
+        EdenBehavior       behavior,
+        CancellationToken  ct = default)
+    {
+        var primId = EdenId<PrimTag>.New();
+        var prim   = new ServerPrim(primId, EdenId<UserTag>.Empty);
+        _prims[primId] = prim;
+
+        var self   = new ServerSelfContext(prim);
+        var handle = await _behaviorHost.AttachAsync(behavior, self, _worldContext, ct)
+            .ConfigureAwait(false);
+        prim.Behavior = handle;
+
+        _logger.LogInformation("Spawned prim {PrimId} with behavior {Behavior}",
+            primId, behavior.GetType().Name);
+        return (primId, handle);
+    }
+
+    /// <summary>Read a prim's current pose. Throws if the prim id is unknown.</summary>
+    public Transform GetPrimPose(EdenId<PrimTag> id) =>
+        _prims.TryGetValue(id, out var prim)
+            ? prim.Pose
+            : throw new KeyNotFoundException($"No prim with id {id}");
 
     internal HealthcheckReply BuildHealthReply() => new(
         Product:       EdenVersion.Product,
@@ -82,6 +121,11 @@ public sealed class EdenServer
                     case MessageKind.AvatarUpdate when session is not null:
                         var update = Envelope.DecodePayload<AvatarUpdate>(frame.Value);
                         await OnAvatarUpdate(session, update, ct);
+                        break;
+
+                    case MessageKind.ClientTouchPrim when session is not null:
+                        var touch = Envelope.DecodePayload<ClientTouchPrim>(frame.Value);
+                        await OnClientTouchPrim(session, touch, ct);
                         break;
 
                     default:
@@ -181,6 +225,27 @@ public sealed class EdenServer
         await BroadcastExceptAsync(sessionId, MessageKind.AvatarUpdate, new AvatarUpdate(initialAvatar), ct);
 
         return session;
+    }
+
+    private async Task OnClientTouchPrim(ClientSession session, ClientTouchPrim touch, CancellationToken ct)
+    {
+        if (!_prims.TryGetValue(touch.PrimId, out var prim))
+        {
+            _logger.LogDebug("Touch on unknown prim {PrimId} from session {SessionId}",
+                touch.PrimId, session.Id);
+            return;
+        }
+
+        if (prim.Behavior is null) return;
+
+        var state  = _avatars.GetValueOrDefault(session.UserId);
+        var avatar = new Avatar(
+            UserId:      session.UserId,
+            DisplayName: state.DisplayName ?? string.Empty,
+            Pose:        state.Transform);
+
+        await prim.Behavior.DispatchAsync(typeof(OnTouchAttribute), [avatar], ct: ct)
+            .ConfigureAwait(false);
     }
 
     private async Task OnAvatarUpdate(ClientSession session, AvatarUpdate update, CancellationToken ct)

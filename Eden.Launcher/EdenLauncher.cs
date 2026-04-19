@@ -33,7 +33,7 @@ public static class EdenLauncher
     public static SoloHandle StartSolo(ILoggerFactory? loggerFactory = null, CancellationToken ct = default)
     {
         var factory = loggerFactory ?? NullLoggerFactory.Instance;
-        var server = new EdenServer(EdenId<WorldTag>.New(), factory.CreateLogger<EdenServer>());
+        var server = new EdenServer(EdenId<WorldTag>.New(), factory);
         var handle = new SoloHandle(server, ct);
         handle.Connect();
         return handle;
@@ -52,7 +52,7 @@ public static class EdenLauncher
         var factory = loggerFactory ?? NullLoggerFactory.Instance;
         var logger  = factory.CreateLogger(typeof(EdenLauncher).FullName!);
         var cert = DevCert.CreateSelfSigned();
-        var server = new EdenServer(EdenId<WorldTag>.New(), factory.CreateLogger<EdenServer>());
+        var server = new EdenServer(EdenId<WorldTag>.New(), factory);
         var hostCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         var listenerOptions = new QuicListenerOptions
@@ -216,11 +216,14 @@ public static class EdenLauncher
 /// </summary>
 public sealed class SoloHandle : IAsyncDisposable
 {
-    private readonly EdenServer _server;
     private readonly CancellationTokenSource _cts;
     private readonly List<(ITransport serverSide, Task loop)> _attached = new();
 
     private ITransport? _primaryViewerSide;
+
+    /// <summary>The in-process server instance. Exposed so hosting code and
+    /// tests can spawn prims, attach behaviors, or query world state.</summary>
+    public EdenServer Server { get; }
 
     public ITransport Transport
         => _primaryViewerSide ?? throw new InvalidOperationException(
@@ -230,14 +233,14 @@ public sealed class SoloHandle : IAsyncDisposable
 
     internal SoloHandle(EdenServer server, CancellationToken ct)
     {
-        _server = server;
-        _cts    = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        Server = server;
+        _cts   = CancellationTokenSource.CreateLinkedTokenSource(ct);
     }
 
     public ITransport Connect()
     {
         var (viewerSide, serverSide) = InMemoryTransport.CreatePair();
-        var loop = Task.Run(() => _server.HandleClientAsync(serverSide, _cts.Token), _cts.Token);
+        var loop = Task.Run(() => Server.HandleClientAsync(serverSide, _cts.Token), _cts.Token);
         _attached.Add((serverSide, loop));
         _primaryViewerSide ??= viewerSide;
         return viewerSide;

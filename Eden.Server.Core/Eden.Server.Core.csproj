@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Eden.Shared\Eden.Shared.csproj" />
+    <ProjectReference Include="..\Eden.Scripting\Eden.Scripting.csproj" />
+    <ProjectReference Include="..\Eden.Scripting.Host\Eden.Scripting.Host.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -77,7 +77,8 @@ public sealed class BehaviorHost
     /// <paramref name="filter"/> lets callers narrow on attribute properties
     /// (e.g. <c>[OnChat(Channel = 5)]</c> only matches when channel 5 is
     /// dispatched). Null filter matches every handler of
-    /// <paramref name="attributeType"/>.</summary>
+    /// <paramref name="attributeType"/>. For targeted dispatch to one
+    /// behavior, use <see cref="BehaviorHandle.DispatchAsync"/>.</summary>
     public async Task DispatchAsync(
         Type                         attributeType,
         object[]                     args,
@@ -87,21 +88,8 @@ public sealed class BehaviorHost
         ArgumentNullException.ThrowIfNull(attributeType);
 
         foreach (var handle in _attached.Keys)
-        {
-            if (!handle.Descriptor.Handlers.TryGetValue(attributeType, out var bindings))
-                continue;
-
-            if (handle.Gate is not null)
-            {
-                await handle.Gate.WaitAsync(ct).ConfigureAwait(false);
-                try     { await InvokeHandlersAsync(handle, bindings, args, filter).ConfigureAwait(false); }
-                finally { handle.Gate.Release(); }
-            }
-            else
-            {
-                await InvokeHandlersAsync(handle, bindings, args, filter).ConfigureAwait(false);
-            }
-        }
+            await BehaviorDispatch.InvokeAsync(handle, attributeType, args, filter, ct)
+                .ConfigureAwait(false);
     }
 
     /// <summary>Typed convenience for chat. Fires only handlers whose
@@ -116,36 +104,6 @@ public sealed class BehaviorHost
             [from, text],
             attr => ((OnChatAttribute)attr).Channel == channel,
             ct);
-
-    private static async Task InvokeHandlersAsync(
-        BehaviorHandle                 handle,
-        IReadOnlyList<HandlerBinding>  bindings,
-        object[]                       args,
-        Func<EventAttribute, bool>?    filter)
-    {
-        foreach (var binding in bindings)
-        {
-            if (filter is not null && !filter(binding.Attribute)) continue;
-
-            try
-            {
-                var task = (Task)binding.Method.Invoke(handle.Behavior, args)!;
-                await task.ConfigureAwait(false);
-            }
-            catch (TargetInvocationException tie) when (tie.InnerException is not null)
-            {
-                handle.Log.LogWarning(tie.InnerException,
-                    "Handler {Method} on {Type} threw",
-                    binding.Method.Name, handle.Behavior.GetType().Name);
-            }
-            catch (Exception ex)
-            {
-                handle.Log.LogWarning(ex,
-                    "Handler {Method} on {Type} threw",
-                    binding.Method.Name, handle.Behavior.GetType().Name);
-            }
-        }
-    }
 
     internal void Detach(BehaviorHandle handle) => _attached.TryRemove(handle, out _);
 }

@@ -330,6 +330,26 @@ public sealed class AvatarLeftFormatter : IMessagePackFormatter<AvatarLeft>
     }
 }
 
+public sealed class ClientTouchPrimFormatter : IMessagePackFormatter<ClientTouchPrim>
+{
+    public static readonly ClientTouchPrimFormatter Instance = new();
+
+    public void Serialize(ref MessagePackWriter writer, ClientTouchPrim value, MessagePackSerializerOptions options)
+    {
+        writer.WriteArrayHeader(1);
+        EdenIdFormatter<PrimTag>.Instance.Serialize(ref writer, value.PrimId, options);
+    }
+
+    public ClientTouchPrim Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    {
+        var count = reader.ReadArrayHeader();
+        if (count != 1)
+            throw new MessagePackSerializationException($"ClientTouchPrim expects 1 element, got {count}");
+        return new ClientTouchPrim(
+            EdenIdFormatter<PrimTag>.Instance.Deserialize(ref reader, options));
+    }
+}
+
 public sealed class HealthcheckFormatter : IMessagePackFormatter<Healthcheck>
 {
     public static readonly HealthcheckFormatter Instance = new();
