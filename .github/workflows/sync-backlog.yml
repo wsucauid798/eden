@@ -83,11 +83,11 @@ jobs:
           GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
           PROJECT_NUMBER: ${{ steps.bootstrap.outputs.number }}
         run: |
-          chmod +x _dev/scripts/sync-backlog.sh
+          chmod +x .github/scripts/sync-backlog.sh
           shopt -s nullglob
           files=(_docs/_development/*.md)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "no backlog files found under _docs/_development/"
             exit 0
           fi
-          ./_dev/scripts/sync-backlog.sh "${files[@]}"
+          ./.github/scripts/sync-backlog.sh "${files[@]}"
