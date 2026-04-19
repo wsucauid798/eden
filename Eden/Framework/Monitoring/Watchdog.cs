@@ -269,10 +269,11 @@ namespace OpenSim.Framework.Monitoring
         {
             lock (m_threads)
             {
-                if(RemoveThread(threadID))
+                if (RemoveThread(threadID))
                 {
-                    //ThreadWatchdogInfo twi = m_threads[threadID];
-                    //twi.Thread.Abort();
+                    // NB: misleading name — Thread.Abort is gone on modern .NET,
+                    // so this now just removes the thread from tracking. Rename
+                    // and convert call sites to cooperative cancellation later.
                     return true;
                 }
                 return false;

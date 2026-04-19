@@ -111,43 +111,43 @@ namespace OpenSim.Region.ScriptEngine.Shared
         public DetectParams()
         {
             Key = UUID.Zero;
-            OffsetPos = new LSL_Types.Vector3();
+            OffsetPos = new Vector3();
             LinkNum = 0;
             Group = UUID.Zero;
             Name = String.Empty;
             Owner = UUID.Zero;
-            Position = new LSL_Types.Vector3();
-            Rotation = new LSL_Types.Quaternion();
+            Position = new Vector3();
+            Rotation = new Quaternion();
             Type = 0;
-            Velocity = new LSL_Types.Vector3();
+            Velocity = new Vector3();
             initializeSurfaceTouch();
         }
 
         public UUID Key;
-        public LSL_Types.Vector3 OffsetPos;
+        public Vector3 OffsetPos;
         public int LinkNum;
         public UUID Group;
         public string Name;
         public UUID Owner;
-        public LSL_Types.Vector3 Position;
-        public LSL_Types.Quaternion Rotation;
+        public Vector3 Position;
+        public Quaternion Rotation;
         public int Type;
-        public LSL_Types.Vector3 Velocity;
+        public Vector3 Velocity;
 
-        private LSL_Types.Vector3 touchST;
-        public LSL_Types.Vector3 TouchST { get { return touchST; } }
+        private Vector3 touchST;
+        public Vector3 TouchST { get { return touchST; } }
 
-        private LSL_Types.Vector3 touchNormal;
-        public LSL_Types.Vector3 TouchNormal { get { return touchNormal; } }
+        private Vector3 touchNormal;
+        public Vector3 TouchNormal { get { return touchNormal; } }
 
-        private LSL_Types.Vector3 touchBinormal;
-        public LSL_Types.Vector3 TouchBinormal { get { return touchBinormal; } }
+        private Vector3 touchBinormal;
+        public Vector3 TouchBinormal { get { return touchBinormal; } }
 
-        private LSL_Types.Vector3 touchPos;
-        public LSL_Types.Vector3 TouchPos { get { return touchPos; } }
+        private Vector3 touchPos;
+        public Vector3 TouchPos { get { return touchPos; } }
 
-        private LSL_Types.Vector3 touchUV;
-        public LSL_Types.Vector3 TouchUV { get { return touchUV; } }
+        private Vector3 touchUV;
+        public Vector3 TouchUV { get { return touchUV; } }
 
         private int touchFace;
         public int TouchFace { get { return touchFace; } }
@@ -156,11 +156,11 @@ namespace OpenSim.Region.ScriptEngine.Shared
         // so be carefull what gets added here
         private void initializeSurfaceTouch()
         {
-            touchST = new LSL_Types.Vector3(-1.0, -1.0, 0.0);
-            touchNormal = new LSL_Types.Vector3();
-            touchBinormal = new LSL_Types.Vector3();
-            touchPos = new LSL_Types.Vector3();
-            touchUV = new LSL_Types.Vector3(-1.0, -1.0, 0.0);
+            touchST = new Vector3(-1.0f, -1.0f, 0.0f);
+            touchNormal = new Vector3();
+            touchBinormal = new Vector3();
+            touchPos = new Vector3();
+            touchUV = new Vector3(-1.0f, -1.0f, 0.0f);
             touchFace = -1;
         }
 
@@ -179,11 +179,11 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 else
                 {
                     // Set the values from the touch data provided by the client
-                    touchST = new LSL_Types.Vector3(value.STCoord);
-                    touchUV = new LSL_Types.Vector3(value.UVCoord);
-                    touchNormal = new LSL_Types.Vector3(value.Normal);
-                    touchBinormal = new LSL_Types.Vector3(value.Binormal);
-                    touchPos = new LSL_Types.Vector3(value.Position);
+                    touchST = new Vector3(value.STCoord);
+                    touchUV = new Vector3(value.UVCoord);
+                    touchNormal = new Vector3(value.Normal);
+                    touchBinormal = new Vector3(value.Binormal);
+                    touchPos = new Vector3(value.Position);
                     touchFace = value.FaceIndex;
                 }
             }
@@ -201,9 +201,9 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 Name = presence.Firstname + " " + presence.Lastname;
 
                 Owner = Key;
-                Position = new LSL_Types.Vector3(presence.AbsolutePosition);
-                Rotation = new LSL_Types.Quaternion(presence.Rotation);
-                Velocity = new LSL_Types.Vector3(presence.Velocity);
+                Position = new Vector3(presence.AbsolutePosition);
+                Rotation = new Quaternion(presence.Rotation);
+                Velocity = new Vector3(presence.Velocity);
 
                 Type = 0x01; // Avatar
                 if (presence.PresenceType == PresenceType.Npc)
@@ -238,20 +238,20 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 }
             }
 
-            Position = new LSL_Types.Vector3(part.AbsolutePosition);
+            Position = new Vector3(part.AbsolutePosition);
 
             Quaternion wr = part.ParentGroup.GroupRotation;
-            Rotation = new LSL_Types.Quaternion(wr.X, wr.Y, wr.Z, wr.W);
+            Rotation = new Quaternion(wr.X, wr.Y, wr.Z, wr.W);
 
-            Velocity = new LSL_Types.Vector3(part.Velocity);
+            Velocity = new Vector3(part.Velocity);
         }
 
         public void Populate(Scene scene, DetectedObject obj)
         {
             if(obj.keyUUID.IsZero()) // land
             {
-                Position = new LSL_Types.Vector3(obj.posVector);
-                Rotation.s = 1.0;
+                Position = new Vector3(obj.posVector);
+                Rotation.W = 1.0f;
                 return;
             }
 
@@ -265,9 +265,9 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 Key = obj.keyUUID;
                 Owner = obj.ownerUUID;
                 Group = obj.groupUUID;
-                Position = new LSL_Types.Vector3(obj.posVector);
-                Rotation = new LSL_Types.Quaternion(obj.rotQuat);
-                Velocity = new LSL_Types.Vector3(obj.velVector);
+                Position = new Vector3(obj.posVector);
+                Rotation = new Quaternion(obj.rotQuat);
+                Velocity = new Vector3(obj.velVector);
                 LinkNum = obj.linkNumber;
                 Type = obj.colliderType;
                 return;
@@ -281,9 +281,9 @@ namespace OpenSim.Region.ScriptEngine.Shared
             Key = obj.keyUUID;
             Owner = obj.ownerUUID;
             Group = obj.groupUUID;
-            Position = new LSL_Types.Vector3(obj.posVector);
-            Rotation = new LSL_Types.Quaternion(obj.rotQuat);
-            Velocity = new LSL_Types.Vector3(obj.velVector);
+            Position = new Vector3(obj.posVector);
+            Rotation = new Quaternion(obj.rotQuat);
+            Velocity = new Vector3(obj.velVector);
             LinkNum = obj.linkNumber;
             if(obj.velVector.IsZero())
                 Type = 4;

@@ -99,7 +99,7 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
-        private readonly DoubleDictionary<UUID, string, Scene> m_localScenes = new DoubleDictionary<UUID, string, Scene>();
+        private readonly OpenMetaverse.DoubleDictionary<UUID, string, Scene> m_localScenes = new OpenMetaverse.DoubleDictionary<UUID, string, Scene>();
 
         public List<Scene> Scenes
         {
@@ -135,7 +135,7 @@ namespace OpenSim.Region.Framework.Scenes
         public SceneManager()
         {
             m_instance = this;
-            m_localScenes = new DoubleDictionary<UUID, string, Scene>();
+            m_localScenes = new OpenMetaverse.DoubleDictionary<UUID, string, Scene>();
         }
 
         public void Close()

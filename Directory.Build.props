@@ -6,10 +6,7 @@
   -->
 
   <PropertyGroup>
-    <!-- Pinned to 12 (.NET 8 LTS) while inherited code still uses `field`
-         as an identifier (C# 14 turns it into a contextual keyword). Bump
-         once YEngine demolition lands. -->
-    <LangVersion>12</LangVersion>
+    <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

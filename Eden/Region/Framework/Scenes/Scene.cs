@@ -323,7 +323,6 @@ namespace OpenSim.Region.Framework.Scenes
         protected IAgentPreferencesService m_AgentPreferencesService;
 
         protected IXMLRPC m_xmlrpcModule;
-        protected IWorldComm m_worldCommModule;
         protected IAvatarFactoryModule m_AvatarFactory;
         protected IConfigSource m_config;
         protected IRegionSerialiserModule m_serialiser;
@@ -1579,13 +1578,6 @@ namespace OpenSim.Region.Framework.Scenes
 //int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
 //System.Diagnostics.Process proc = new System.Diagnostics.Process();
 //proc.EnableRaisingEvents=false;
-//proc.StartInfo.FileName = "/bin/kill";
-//proc.StartInfo.Arguments = "-QUIT " + pid.ToString();
-//proc.Start();
-//proc.WaitForExit();
-//Thread.Sleep(1000);
-//Environment.Exit(1);
-                //m_heartbeatThread.Abort();
                 Watchdog.AbortThread(m_heartbeatThread.ManagedThreadId);
                 m_heartbeatThread = null;
             }
@@ -1608,7 +1600,6 @@ namespace OpenSim.Region.Framework.Scenes
         public void SetModuleInterfaces()
         {
             m_xmlrpcModule = RequestModuleInterface<IXMLRPC>();
-            m_worldCommModule = RequestModuleInterface<IWorldComm>();
             XferManager = RequestModuleInterface<IXfer>();
             m_AvatarFactory = RequestModuleInterface<IAvatarFactoryModule>();
             AttachmentsModule = RequestModuleInterface<IAttachmentsModule>();

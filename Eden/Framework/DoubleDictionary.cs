@@ -31,13 +31,10 @@ using System.Collections.Generic;
 namespace OpenSim.Framework
 {
     /// <summary>
-    /// A double dictionary that is thread abort safe.
+    /// A dictionary keyed by two independent keys, with reader/writer locking.
+    /// Adapted from OpenMetaverse.DoubleDictionary.
     /// </summary>
-    /// <remarks>
-    /// This adapts OpenMetaverse.DoubleDictionary to be thread-abort safe by acquiring ReaderWriterLockSlim within
-    /// a finally section (which can't be interrupted by Thread.Abort()).
-    /// </remarks>
-    public class DoubleDictionaryThreadAbortSafe<TKey1, TKey2, TValue>
+    public class DoubleDictionary<TKey1, TKey2, TValue>
     {
         Dictionary<TKey1, TValue> Dictionary1;
         Dictionary<TKey2, TValue> Dictionary2;
@@ -45,21 +42,21 @@ namespace OpenSim.Framework
 
         ReaderWriterLockSlim rwLock = new ReaderWriterLockSlim();
 
-        public DoubleDictionaryThreadAbortSafe()
+        public DoubleDictionary()
         {
             Dictionary1 = new Dictionary<TKey1,TValue>();
             Dictionary2 = new Dictionary<TKey2,TValue>();
             m_array = null;
         }
 
-        public DoubleDictionaryThreadAbortSafe(int capacity)
+        public DoubleDictionary(int capacity)
         {
             Dictionary1 = new Dictionary<TKey1, TValue>(capacity);
             Dictionary2 = new Dictionary<TKey2, TValue>(capacity);
             m_array = null;
         }
 
-        ~DoubleDictionaryThreadAbortSafe()
+        ~DoubleDictionary()
         {
             if(rwLock != null)
                 rwLock.Dispose();
@@ -71,9 +68,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -98,9 +94,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -127,9 +122,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -174,9 +168,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -220,9 +213,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -262,9 +254,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -290,9 +281,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -327,9 +317,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -353,9 +342,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {
@@ -407,9 +395,8 @@ namespace OpenSim.Framework
 
             try
             {
-                // Avoid an asynchronous Thread.Abort() from possibly never existing an acquired lock by placing
-                // the acquision inside the main try.  The inner finally block is needed because thread aborts cannot
-                // interrupt code in these blocks (hence gotLock is guaranteed to be set correctly).
+                // try/finally ensures gotLock reflects the acquire call even if an
+                // exception is thrown between EnterXLock and the assignment.
                 try {}
                 finally
                 {

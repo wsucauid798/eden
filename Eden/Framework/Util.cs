@@ -41,7 +41,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -2378,35 +2377,6 @@ namespace OpenSim.Framework
             }
         }
 
-        public static void SerializeToFile(string filename, Object obj)
-        {
-            var formatter = new BinaryFormatter();
-            try
-            {
-                using Stream stream = new FileStream(filename, FileMode.Create,FileAccess.Write, FileShare.None);
-                formatter.Serialize(stream, obj);
-            }
-            catch (Exception e)
-            {
-                m_log.Error(e.ToString());
-            }
-        }
-
-        public static Object DeserializeFromFile(string filename)
-        {
-            try
-            {
-                using Stream stream = new FileStream(filename, FileMode.Open,FileAccess.Read, FileShare.None);
-                var formatter = new BinaryFormatter();
-                return formatter.Deserialize(stream);
-            }
-            catch (Exception e)
-            {
-                m_log.Error(e.ToString());
-            }
-            return null;
-        }
-
         public static string Compress(string text)
         {
             using MemoryStream memory = new();
@@ -3357,10 +3327,7 @@ namespace OpenSim.Framework
             {
                 string ret = (context == null) ? "" : ("(" + context + ") ");
 
-                StackTrace activeStackTrace = Util.GetStackTrace(Thread);
-                if (activeStackTrace != null)
-                    ret += activeStackTrace.ToString();
-                else if (StackTrace != null)
+                if (StackTrace != null)
                     ret += "(Stack trace when queued) " + StackTrace;
                 // else, no stack trace available
 
@@ -3585,93 +3552,6 @@ namespace OpenSim.Framework
             }
 
             full = dest.ToString();
-        }
-
-        /// <summary>
-        /// Return the stack trace of a different thread.
-        /// </summary>
-        /// <remarks>
-        /// This is complicated because the thread needs to be paused in order to get its stack
-        /// trace. And pausing another thread can cause a deadlock. This method attempts to
-        /// avoid deadlock by using a short timeout (200ms), after which it gives up and
-        /// returns 'null' instead of the stack trace.
-        ///
-        /// Take from: http://stackoverflow.com/a/14935378
-        ///
-        /// WARNING: this doesn't work in Mono. See https://bugzilla.novell.com/show_bug.cgi?id=571691
-        ///
-        /// </remarks>
-        /// <returns>The stack trace, or null if failed to get it</returns>
-        private static StackTrace GetStackTrace(Thread targetThread)
-        {
-            return null;
-            /*
-                    not only this does not work on mono but it is not longer recomended on windows.
-                    can cause deadlocks etc.
-
-                        if (IsPlatformMono)
-                        {
-                            // This doesn't work in Mono
-                            return null;
-                        }
-
-                        ManualResetEventSlim fallbackThreadReady = new ManualResetEventSlim();
-                        ManualResetEventSlim exitedSafely = new ManualResetEventSlim();
-
-                        try
-                        {
-                            new Thread(delegate()
-                            {
-                                fallbackThreadReady.Set();
-                                while (!exitedSafely.Wait(200))
-                                {
-                                    try
-                                    {
-                                        targetThread.Resume();
-                                    }
-                                    catch (Exception)
-                                    {
-                                        // Whatever happens, do never stop to resume the main-thread regularly until the main-thread has exited safely.
-                                    }
-                                }
-                            }).Start();
-
-                            fallbackThreadReady.Wait();
-                            // From here, you have about 200ms to get the stack-trace
-
-                            targetThread.Suspend();
-
-                            StackTrace trace = null;
-                            try
-                            {
-                                trace = new StackTrace(targetThread, true);
-                            }
-                            catch (ThreadStateException)
-                            {
-                                //failed to get stack trace, since the fallback-thread resumed the thread
-                                //possible reasons:
-                                //1.) This thread was just too slow
-                                //2.) A deadlock ocurred
-                                //Automatic retry seems too risky here, so just return null.
-                            }
-
-                            try
-                            {
-                                targetThread.Resume();
-                            }
-                            catch (ThreadStateException)
-                            {
-                                // Thread is running again already
-                            }
-
-                            return trace;
-                        }
-                        finally
-                        {
-                            // Signal the fallack-thread to stop
-                            exitedSafely.Set();
-                        }
-            */
         }
 
         /// <summary>

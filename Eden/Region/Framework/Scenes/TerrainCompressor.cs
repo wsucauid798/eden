@@ -42,7 +42,7 @@ using OpenSim.Framework;
 using OpenMetaverse;
 using OpenMetaverse.Packets;
 
-namespace OpenSim.Region.ClientStack.LindenUDP
+namespace OpenSim.Region.Framework.Scenes
 {
     public static class OpenSimTerrainCompressor
     {

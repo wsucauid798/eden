@@ -1497,8 +1497,6 @@ namespace OpenSim.Region.CoreModules.World.Estate
             if(sceneData == null || sceneData.Count == 0)
                 remoteClient.SendLandStatReply(0, requestFlags, 0, new LandStatReportItem[0]);
 
-            IUrlModule urlModule = Scene.RequestModuleInterface<IUrlModule>();
-
             //reformat the name so we don't have to do it on every item
             bool hasfilter = false;
             if ((requestFlags & 0x0e) != 0 && !string.IsNullOrWhiteSpace(filter))
@@ -1536,19 +1534,12 @@ namespace OpenSim.Region.CoreModules.World.Estate
                 if (so == null || so.IsDeleted || so.inTransit)
                     continue;
 
+                // Filter out scripts that haven't executed or use less than 1024 bytes,
+                // to keep the report readable. (URL-allocation exemption dropped along
+                // with the LSL frontend.)
+                if (entry.time < 0.001 && entry.memory < 1024)
+                    continue;
                 int urls_used = 0;
-                if (urlModule != null)
-                {
-                    urls_used = urlModule.GetUrlCount(sop.UUID);
-
-                    // Don't show scripts that haven't executed or where execution time is below one microsecond in
-                    // order to produce a more readable report.
-                    // Unless they are using URLs or using 1024 bytes or more.
-                    if (entry.time < 0.001 && entry.memory < 1024 && urls_used == 0)
-                        continue;
-                }
-                else if (entry.time < 0.001 && entry.memory < 1024)
-                        continue;
 
                 ILandObject land = Scene.LandChannel.GetLandObject(so.AbsolutePosition);
                 if((requestFlags & 1) != 0 && land.LandData.LocalID != parcelID)
