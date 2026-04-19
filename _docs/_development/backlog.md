@@ -36,20 +36,49 @@ Working list of concrete tasks. Ticking order is rough — phase gates are in
 Remove the layers we're not keeping. Each item is "delete, then build to see
 what stops compiling, then delete the fallout."
 
+Every removal is paired with what replaces it in Phase 2+. Don't tick off a
+demolition line until the replacement is either (a) scheduled or (b)
+explicitly decided to be *no replacement*.
+
 - [ ] LLUDP stack — remove `Eden/Region/ClientStack/Linden/*`
+  - Replaced by: new wire protocol over Kestrel (WebSocket or WebTransport).
+  - Breaks: client connection lifecycle, packet throttling, presence heartbeats, mesh/asset streaming pipe.
 - [ ] LSL frontend — remove LSL grammar, compiler frontend, `ll*()` function surface
+  - Replaced by: C# scripting via Roslyn (Phase 3).
+  - Breaks: every script event (`touch_start`, `state_entry`, …), every `ll*()` callsite in user content. No migration; new API.
 - [ ] Legacy caps handlers — remove inherited caps endpoints (keep the dispatch shape for later)
+  - Replaced by: typed RPC endpoints on the new host.
+  - Breaks: inventory fetches, mesh upload, asset transfer, seed-cap handshake.
 - [ ] Custom HTTP server — remove `OSHttpServer` and the custom `HttpListener.cs`
+  - Replaced by: ASP.NET Core + Kestrel (Phase 2).
+  - Breaks: all service endpoints, startup sequencing, middleware shape.
 - [ ] Mono.Addins — remove plugin-loader wiring and `.addin.xml` files
+  - Replaced by: lightweight plugin contract — interface + reflection discovery, or first-party-only with no plugin layer. Decide during Phase 2.
+  - Breaks: how region modules get discovered and loaded.
 - [ ] Nini config — remove Nini dependency and its `IConfigSource` usage
+  - Replaced by: `Microsoft.Extensions.Configuration` (Phase 2).
+  - Breaks: all `.ini` reads; config section names and hot-reload semantics change.
 - [ ] log4net — remove `ILog`-based logging calls (placeholder for Phase 2 replacement)
+  - Replaced by: `Microsoft.Extensions.Logging` with Serilog sink (Phase 2).
+  - Breaks: log output format, appender config, any external log scraping.
 - [ ] BinaryFormatter — delete usages in `Eden/Framework/Util.cs`
+  - Replaced by: explicit serialisation — `System.Text.Json` for interchange, MessagePack/protobuf where size/perf matters.
+  - Breaks: any persisted state that used it. Audit call sites before deleting — if it's only in-memory clone helpers, no replacement needed.
 - [ ] Thread.Abort / Thread.Suspend — delete from `Util.cs`, `DoubleDictionaryThreadAbortSafe.cs`
+  - Replaced by: `CancellationToken`-based cooperative cancellation.
+  - Breaks: anywhere scripts or long-running workers were aborted externally; all such call sites need a cooperative-shutdown rewrite.
 - [ ] AppDomain.CurrentDomain — delete from `Eden/Region/Application/Application.cs`
+  - Replaced by: nothing, or `AssemblyLoadContext` if we need runtime assembly isolation later (Phase 6 sandboxing may want this).
+  - Breaks: assembly-resolve hooks, if used.
 - [ ] XMLRPC and legacy grid protocols — delete with LLUDP
+  - Replaced by: new RPC protocol; no grid-interop with OpenSim grids.
+  - Breaks: any inter-grid message. Confirmed non-goal per plan.md.
 - [ ] IAsyncResult / BeginInvoke async — mark for rewrite; delete any that were LLUDP-only
+  - Replaced by: `Task`-based async / `await`.
+  - Breaks: nothing functional — mechanical rewrite.
 - [ ] Build still succeeds with demolition merged
 - [ ] Surviving scene graph still loads and runs a smoke-test region
+- [ ] Bump `<LangVersion>` in `Directory.Build.props` from 12 back to `latest` once YEngine is demolished (YEngine's `field` identifier collides with C# 14's `field` keyword)
 - [ ] Decision landed on sandboxing (see Open Decisions)
 - [ ] Decision landed on wire protocol (see Open Decisions)
 
