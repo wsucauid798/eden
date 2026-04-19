@@ -72,21 +72,29 @@ public class WireRoundTripTests
     }
 
     [Fact]
-    public void Serialisation_Is_Bounded()
+    public void Serialisation_Is_Compact()
     {
-        // Loose sanity bound. The contractless resolver encodes property names
-        // (inflates the payload); a future custom-formatter pass should cut
-        // typical AvatarState below ~120 bytes. If this fails, someone
-        // introduced something expensive (a big string, untrimmed arrays).
-        var state = new AvatarState(
+        // Regression guard: Eden's custom formatters serialize records as
+        // positional arrays (no property-name overhead). A typical AvatarState
+        // encodes in <120 bytes. If this fails, someone introduced a name-keyed
+        // formatter or a heavy field.
+        var minimal = new AvatarState(
             EdenId<UserTag>.New(),
             EdenId<SessionTag>.New(),
             "Eve",
             Transform.Identity,
             Vector3.Zero,
             0);
+        Assert.InRange(WireFormat.Serialize(minimal).Length, 1, 120);
 
-        var bytes = WireFormat.Serialize(state);
-        Assert.InRange(bytes.Length, 1, 400);
+        var prim = new PrimState(
+            EdenId<PrimTag>.New(),
+            EdenId<UserTag>.New(),
+            Transform.Identity,
+            new Vector3(2f, 2f, 2f),
+            EdenId<AssetTag>.New(),
+            new Color(200, 100, 50, 255),
+            PrimFlags.Physical);
+        Assert.InRange(WireFormat.Serialize(prim).Length, 1, 140);
     }
 }
