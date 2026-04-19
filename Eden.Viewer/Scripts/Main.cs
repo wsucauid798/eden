@@ -14,66 +14,127 @@ using Eden.Shared.Transport;
 namespace Eden.Viewer;
 
 /// <summary>
-/// Root scene built entirely in code — no .tscn scene content needed.
+/// Root scene built entirely in code.
 /// <para>
-/// On launch a simple mode menu is shown. Press:
-/// <list type="bullet">
-///   <item><c>1</c> — solo (private, in-process world)</item>
-///   <item><c>2</c> — host (opens a QUIC listener on port 5001)</item>
-///   <item><c>3</c> — join (connects to localhost:5001)</item>
-/// </list>
-/// Env vars <c>EDEN_MODE</c>, <c>EDEN_HOST</c>, <c>EDEN_PORT</c> auto-select
-/// and skip the menu if present.
+/// Modes (picked at startup via keys <c>1</c>/<c>2</c>/<c>3</c>, or the
+/// <c>EDEN_MODE</c> env var): solo / host / join.
 /// </para>
+/// Controls once in the world:
+/// <list type="bullet">
+///   <item>WASD — move relative to camera yaw</item>
+///   <item>Mouse — orbit camera around the avatar</item>
+///   <item>Esc  — release / recapture mouse</item>
+/// </list>
 /// </summary>
 public partial class Main : Node3D
 {
-    private const float  MoveSpeed    = 5f;
-    private const double SendHz       = 20.0;
-    private const int    DefaultPort  = 5001;
+    private const float  MoveSpeed        = 5f;
+    private const float  MouseSensitivity = 0.003f;
+    private const float  CameraDistance   = 6f;
+    private const float  CameraHeight     = 2.2f;
+    private const double SendHz           = 20.0;
+    private const int    DefaultPort      = 5001;
     private readonly double _sendInterval = 1.0 / SendHz;
 
     private SoloHandle?   _solo;
     private HostHandle?   _host;
     private ViewerClient? _client;
-    private MeshInstance3D? _playerCube;
-    private Label? _menuLabel;
 
-    private readonly Dictionary<EdenId<UserTag>, MeshInstance3D> _remoteCubes    = new();
-    private readonly ConcurrentQueue<AvatarState>                _pendingUpdates = new();
-    private readonly ConcurrentQueue<EdenId<UserTag>>            _pendingLeaves  = new();
+    private MeshInstance3D? _playerCube;
+    private Label3D?        _playerLabel;
+    private Node3D?         _cameraRig;
+    private Node3D?         _yawPivot;
+    private Node3D?         _pitchPivot;
+    private Label?          _menuLabel;
+    private Label?          _hudLabel;
+
+    private readonly Dictionary<EdenId<UserTag>, RemoteAvatar> _remote          = new();
+    private readonly ConcurrentQueue<AvatarState>              _pendingUpdates  = new();
+    private readonly ConcurrentQueue<EdenId<UserTag>>          _pendingLeaves   = new();
 
     private double _sendAccumulator;
+    private float  _yaw;
+    private float  _pitch = -0.25f;
     private bool   _started;
+    private string _displayName = "Player";
+
+    // ------------------------------------------------------------------
+    // Lifecycle
+    // ------------------------------------------------------------------
 
     public override void _Ready()
     {
-        // If env vars pre-select a mode, start immediately and skip the menu.
+        _displayName = OS.GetEnvironment("USERNAME") is { Length: > 0 } u ? u : "Player";
+
         var envMode = (OS.GetEnvironment("EDEN_MODE") ?? "").ToLowerInvariant();
         if (envMode is "solo" or "host" or "join")
         {
             _ = StartAsync(envMode);
             return;
         }
-
         ShowMenu();
     }
 
     public override async void _Input(InputEvent @event)
     {
-        if (_started || @event is not InputEventKey { Pressed: true } key) return;
-
-        var mode = key.Keycode switch
+        if (!_started)
         {
-            Key.Key1 or Key.Kp1 => "solo",
-            Key.Key2 or Key.Kp2 => "host",
-            Key.Key3 or Key.Kp3 => "join",
-            _ => null,
-        };
-        if (mode is null) return;
+            if (@event is InputEventKey { Pressed: true } menuKey)
+            {
+                var mode = menuKey.Keycode switch
+                {
+                    Key.Key1 or Key.Kp1 => "solo",
+                    Key.Key2 or Key.Kp2 => "host",
+                    Key.Key3 or Key.Kp3 => "join",
+                    _ => null,
+                };
+                if (mode is not null) await StartAsync(mode);
+            }
+            return;
+        }
 
-        await StartAsync(mode);
+        switch (@event)
+        {
+            case InputEventMouseMotion mm when Input.MouseMode == Input.MouseModeEnum.Captured:
+                _yaw   -= mm.Relative.X * MouseSensitivity;
+                _pitch  = Mathf.Clamp(_pitch - mm.Relative.Y * MouseSensitivity,
+                                      -Mathf.Pi / 2 + 0.1f, Mathf.Pi / 4);
+                if (_yawPivot   is not null) _yawPivot.Rotation   = new Vector3(0, _yaw, 0);
+                if (_pitchPivot is not null) _pitchPivot.Rotation = new Vector3(_pitch, 0, 0);
+                break;
+
+            case InputEventKey { Pressed: true, Keycode: Key.Escape }:
+                Input.MouseMode = Input.MouseMode == Input.MouseModeEnum.Captured
+                    ? Input.MouseModeEnum.Visible
+                    : Input.MouseModeEnum.Captured;
+                break;
+
+            case InputEventMouseButton { Pressed: true } when Input.MouseMode == Input.MouseModeEnum.Visible:
+                Input.MouseMode = Input.MouseModeEnum.Captured;
+                break;
+        }
     }
+
+    public override void _Process(double delta)
+    {
+        if (!_started) return;
+        HandleMovement(delta);
+        UpdateCameraRig();
+        ApplyPendingRemoteEvents();
+        UpdateHud();
+        MaybeSendPose(delta);
+    }
+
+    public override async void _ExitTree()
+    {
+        if (_client is not null) await _client.DisposeAsync();
+        if (_solo   is not null) await _solo.DisposeAsync();
+        if (_host   is not null) await _host.DisposeAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Mode menu
+    // ------------------------------------------------------------------
 
     private void ShowMenu()
     {
@@ -85,7 +146,6 @@ public partial class Main : Node3D
         };
         _menuLabel.AddThemeFontSizeOverride("font_size", 32);
         AddChild(_menuLabel);
-        // Must call this after AddChild — it's a method, not a settable property.
         _menuLabel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
     }
 
@@ -98,6 +158,7 @@ public partial class Main : Node3D
         _menuLabel = null;
 
         BuildScene();
+        BuildHud();
 
         var transport = await ResolveTransportAsync(mode);
 
@@ -105,10 +166,14 @@ public partial class Main : Node3D
         _client.AvatarUpdated += state  => _pendingUpdates.Enqueue(state);
         _client.AvatarLeft    += userId => _pendingLeaves.Enqueue(userId);
 
-        await _client.ConnectAsync(OS.GetEnvironment("USERNAME") ?? "Player");
+        await _client.ConnectAsync(_displayName);
         GD.Print($"[Eden] connected. My UserId = {_client.MyUserId}");
 
+        // Own label displays the name immediately; movement fires real updates.
+        if (_playerLabel is not null) _playerLabel.Text = _displayName;
+
         await SendCurrentPoseAsync();
+        Input.MouseMode = Input.MouseModeEnum.Captured;
     }
 
     private async Task<ITransport> ResolveTransportAsync(string mode)
@@ -136,14 +201,12 @@ public partial class Main : Node3D
         }
     }
 
-    // ---- scene construction ----
+    // ------------------------------------------------------------------
+    // World construction
+    // ------------------------------------------------------------------
 
     private void BuildScene()
     {
-        var camera = new Camera3D { Position = new Vector3(0f, 4f, 8f) };
-        AddChild(camera);
-        camera.LookAt(Vector3.Zero, Vector3.Up);
-
         var light = new DirectionalLight3D
         {
             Rotation = new Vector3(-Mathf.Pi / 4f, -Mathf.Pi / 6f, 0f),
@@ -152,7 +215,7 @@ public partial class Main : Node3D
 
         var floor = new MeshInstance3D
         {
-            Mesh     = new PlaneMesh { Size = new Vector2(40f, 40f) },
+            Mesh     = new PlaneMesh { Size = new Vector2(80f, 80f) },
             Position = Vector3.Zero,
         };
         floor.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
@@ -161,6 +224,7 @@ public partial class Main : Node3D
         });
         AddChild(floor);
 
+        // Player — blue cube + billboarded name label.
         _playerCube = new MeshInstance3D
         {
             Mesh     = new BoxMesh { Size = Vector3.One },
@@ -171,29 +235,79 @@ public partial class Main : Node3D
             AlbedoColor = new Color(0.30f, 0.60f, 0.95f),
         });
         AddChild(_playerCube);
+
+        _playerLabel = BuildNameLabel(_displayName);
+        _playerCube.AddChild(_playerLabel);
+
+        // Camera rig — separate node that tracks player's position (not
+        // rotation). Yaw and pitch come from the mouse.
+        _cameraRig  = new Node3D();
+        _yawPivot   = new Node3D();
+        _pitchPivot = new Node3D { Rotation = new Vector3(_pitch, 0, 0) };
+        var camera  = new Camera3D { Position = new Vector3(0f, CameraHeight, CameraDistance) };
+
+        AddChild(_cameraRig);
+        _cameraRig.AddChild(_yawPivot);
+        _yawPivot.AddChild(_pitchPivot);
+        _pitchPivot.AddChild(camera);
+        camera.LookAt(_cameraRig.GlobalPosition + Vector3.Up * 0.8f, Vector3.Up);
     }
 
-    // ---- per-frame ----
-
-    public override void _Process(double delta)
+    private static Label3D BuildNameLabel(string text) => new Label3D
     {
-        if (!_started) return;
-        HandleMovement(delta);
-        ApplyPendingRemoteEvents();
-        MaybeSendPose(delta);
+        Text       = text,
+        Position   = new Vector3(0f, 1.2f, 0f),
+        Billboard  = BaseMaterial3D.BillboardModeEnum.Enabled,
+        NoDepthTest = true,
+        PixelSize  = 0.004f,
+        Modulate   = Colors.White,
+        OutlineSize = 6,
+    };
+
+    private void BuildHud()
+    {
+        var hud = new CanvasLayer();
+        AddChild(hud);
+
+        _hudLabel = new Label
+        {
+            Text     = "",
+            Position = new Vector2(16f, 14f),
+        };
+        _hudLabel.AddThemeFontSizeOverride("font_size", 16);
+        _hudLabel.AddThemeColorOverride("font_color", new Color(0.95f, 0.95f, 0.95f));
+        hud.AddChild(_hudLabel);
     }
+
+    // ------------------------------------------------------------------
+    // Per-frame
+    // ------------------------------------------------------------------
 
     private void HandleMovement(double delta)
     {
         if (_playerCube is null) return;
 
-        var dir = new Vector3(
+        var input = new Vector3(
             x: (Input.IsKeyPressed(Key.D) ? 1f : 0f) - (Input.IsKeyPressed(Key.A) ? 1f : 0f),
             y: 0f,
             z: (Input.IsKeyPressed(Key.S) ? 1f : 0f) - (Input.IsKeyPressed(Key.W) ? 1f : 0f));
 
-        if (dir != Vector3.Zero)
-            _playerCube.Position += dir.Normalized() * MoveSpeed * (float)delta;
+        if (input == Vector3.Zero) return;
+
+        // Move in the plane, relative to camera yaw.
+        var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
+        var worldDir = (yawBasis * input.Normalized()).Normalized();
+        _playerCube.Position += worldDir * MoveSpeed * (float)delta;
+
+        // Face movement direction.
+        _playerCube.Rotation = new Vector3(
+            0f, Mathf.Atan2(-worldDir.X, -worldDir.Z), 0f);
+    }
+
+    private void UpdateCameraRig()
+    {
+        if (_cameraRig is null || _playerCube is null) return;
+        _cameraRig.Position = _playerCube.Position;
     }
 
     private void ApplyPendingRemoteEvents()
@@ -220,43 +334,58 @@ public partial class Main : Node3D
         await _client.SendAvatarUpdateAsync(new AvatarState(
             UserId:         _client.MyUserId,
             SessionId:      _client.Session.Value.SessionId,
-            DisplayName:    "Player",
+            DisplayName:    _displayName,
             Transform:      new Eden.Shared.Math.Transform(edenPos, Eden.Shared.Math.Quaternion.Identity),
             Velocity:       Eden.Shared.Math.Vector3.Zero,
             AppearanceHash: 0));
     }
 
-    // ---- remote avatars ----
+    private void UpdateHud()
+    {
+        if (_hudLabel is null || _playerCube is null) return;
+        var pos = _playerCube.Position;
+        _hudLabel.Text = $"Eden · {ModeLabel()} · {_displayName} · " +
+                         $"({pos.X:F1}, {pos.Z:F1}) · {_remote.Count} other(s)";
+    }
+
+    private string ModeLabel() =>
+        _host is not null ? "hosting" :
+        _solo is not null ? "solo"    :
+                            "joined";
+
+    // ------------------------------------------------------------------
+    // Remote avatars
+    // ------------------------------------------------------------------
 
     private void ApplyRemoteAvatar(AvatarState state)
     {
-        if (!_remoteCubes.TryGetValue(state.UserId, out var cube))
+        if (!_remote.TryGetValue(state.UserId, out var avatar))
         {
-            cube = new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One } };
+            var cube = new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One } };
             cube.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
             {
                 AlbedoColor = new Color(0.95f, 0.55f, 0.20f),
             });
             AddChild(cube);
-            _remoteCubes[state.UserId] = cube;
+
+            var label = BuildNameLabel(state.DisplayName);
+            cube.AddChild(label);
+
+            avatar = new RemoteAvatar(cube, label);
+            _remote[state.UserId] = avatar;
         }
 
         var p = state.Transform.Position;
-        cube.Position = new Vector3(p.X, p.Y + 0.5f, p.Z);
+        avatar.Cube.Position = new Vector3(p.X, p.Y + 0.5f, p.Z);
+        if (!string.IsNullOrEmpty(state.DisplayName))
+            avatar.Label.Text = state.DisplayName;
     }
 
     private void RemoveRemoteAvatar(EdenId<UserTag> userId)
     {
-        if (_remoteCubes.Remove(userId, out var cube))
-            cube.QueueFree();
+        if (_remote.Remove(userId, out var avatar))
+            avatar.Cube.QueueFree();
     }
 
-    // ---- teardown ----
-
-    public override async void _ExitTree()
-    {
-        if (_client is not null) await _client.DisposeAsync();
-        if (_solo   is not null) await _solo.DisposeAsync();
-        if (_host   is not null) await _host.DisposeAsync();
-    }
+    private readonly record struct RemoteAvatar(MeshInstance3D Cube, Label3D Label);
 }
