@@ -35,10 +35,13 @@ public partial class WorldRenderer : Node3D
 
     public override void _Ready()
     {
+        // Sun — pitched down-and-forward so the scene is lit from the start,
+        // before any WorldStateUpdate arrives from the server.
         _sun = new DirectionalLight3D
         {
-            LightEnergy           = 1.6f,
-            LightColor            = new Color(1.0f, 0.97f, 0.92f), // slightly warm
+            Rotation              = new Vector3(-Mathf.Pi / 4f, -Mathf.Pi / 6f, 0f),
+            LightEnergy           = 2.5f,
+            LightColor            = new Color(1.0f, 0.97f, 0.92f),
             ShadowEnabled         = true,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
             DirectionalShadowMaxDistance = 200f,
@@ -47,13 +50,17 @@ public partial class WorldRenderer : Node3D
         };
         AddChild(_sun);
 
-        var sky = new PhysicalSkyMaterial
+        // Procedural sky — simpler + more forgiving than PhysicalSkyMaterial,
+        // and always produces a visible blue dome regardless of sun position.
+        var sky = new ProceduralSkyMaterial
         {
-            RayleighCoefficient = 2.0f,
-            MieCoefficient      = 0.005f,
-            SunDiscScale        = 2.5f,      // visible sun instead of a pinprick
-            GroundColor         = new Color(0.35f, 0.35f, 0.30f),
-            EnergyMultiplier    = 1.0f,
+            SkyTopColor     = new Color(0.35f, 0.54f, 0.82f),
+            SkyHorizonColor = new Color(0.75f, 0.80f, 0.88f),
+            GroundBottomColor = new Color(0.18f, 0.18f, 0.18f),
+            GroundHorizonColor = new Color(0.55f, 0.55f, 0.52f),
+            SunAngleMax     = 30f,
+            SunCurve        = 0.15f,
+            EnergyMultiplier = 1.0f,
         };
 
         var env = new Godot.Environment
@@ -61,29 +68,33 @@ public partial class WorldRenderer : Node3D
             BackgroundMode      = Godot.Environment.BGMode.Sky,
             Sky                 = new Sky { SkyMaterial = sky },
 
-            AmbientLightSource  = Godot.Environment.AmbientSource.Sky,
-            AmbientLightSkyContribution = 1.0f,
-            AmbientLightEnergy  = 1.0f,
+            // Constant-colour ambient — independent of sky/sun alignment,
+            // so the world is always visible. Think of it as "baseline fill
+            // light from everywhere." Weather and time-of-day tint this
+            // in ApplyWorldState.
+            AmbientLightSource  = Godot.Environment.AmbientSource.Color,
+            AmbientLightColor   = new Color(0.55f, 0.60f, 0.70f),
+            AmbientLightEnergy  = 1.3f,
 
             TonemapMode         = Godot.Environment.ToneMapper.Filmic,
             TonemapExposure     = 1.0f,
             TonemapWhite        = 6.0f,
 
-            // Subtle distance fog so the horizon isn't a razor edge.
+            // Subtle distance fog.
             FogEnabled          = true,
             FogMode             = Godot.Environment.FogModeEnum.Exponential,
-            FogDensity          = 0.002f,
-            FogLightColor       = new Color(0.82f, 0.86f, 0.92f),
+            FogDensity          = 0.0015f,
+            FogLightColor       = new Color(0.78f, 0.82f, 0.90f),
 
-            // Ambient occlusion — cube corners catch shadow, feel 3D.
+            // Ambient occlusion — cube corners, pillar bases catch shadow.
             SsaoEnabled         = true,
             SsaoIntensity       = 1.5f,
-            SsaoRadius          = 1.0f,
+            SsaoRadius          = 1.2f,
 
-            // Subtle bloom around bright pixels.
+            // Subtle bloom.
             GlowEnabled         = true,
             GlowIntensity       = 0.3f,
-            GlowStrength        = 0.7f,
+            GlowStrength        = 0.8f,
             GlowBloom           = 0.05f,
         };
 
@@ -113,35 +124,47 @@ public partial class WorldRenderer : Node3D
     {
         if (_sun is not null)
         {
+            // Tilt the sun to a plausible direction for the hour. We keep
+            // the yaw slightly off-north so shadows are never perfectly
+            // axis-aligned with the scene.
             _sun.Rotation = new Vector3(
                 x: SunMath.SunRotationX(state.TimeOfDayHours),
-                y: 0f,
+                y: -Mathf.Pi / 6f,
                 z: 0f);
-            // Dim the sun at night so ambient sky lighting dominates.
-            _sun.LightEnergy = SunMath.IsDaytime(state.TimeOfDayHours) ? 1.2f : 0.15f;
+            _sun.LightEnergy = SunMath.IsDaytime(state.TimeOfDayHours) ? 2.5f : 0.8f;
         }
 
-        if (_worldEnv?.Environment is { Sky.SkyMaterial: PhysicalSkyMaterial sky } env)
+        if (_worldEnv?.Environment is { Sky.SkyMaterial: ProceduralSkyMaterial sky } env)
         {
-            sky.GroundColor = GroundTintFor(state.Weather);
-            env.FogDensity  = state.Weather switch
+            sky.SkyTopColor     = SkyTopFor(state.Weather);
+            sky.SkyHorizonColor = HorizonFor(state.Weather);
+            env.FogDensity      = state.Weather switch
             {
-                Weather.Rain   => 0.010f,
-                Weather.Snow   => 0.008f,
-                Weather.Cloudy => 0.005f,
-                _              => 0.002f,
+                Weather.Rain   => 0.008f,
+                Weather.Snow   => 0.006f,
+                Weather.Cloudy => 0.004f,
+                _              => 0.0015f,
             };
         }
 
         _lastApplied = state;
     }
 
-    private static Color GroundTintFor(Weather weather) => weather switch
+    private static Color SkyTopFor(Weather weather) => weather switch
     {
-        Weather.Clear  => new Color(0.35f, 0.35f, 0.30f),
-        Weather.Cloudy => new Color(0.30f, 0.30f, 0.32f),
-        Weather.Rain   => new Color(0.22f, 0.24f, 0.28f),
-        Weather.Snow   => new Color(0.70f, 0.72f, 0.78f),
-        _              => new Color(0.35f, 0.35f, 0.30f),
+        Weather.Clear  => new Color(0.35f, 0.54f, 0.82f),
+        Weather.Cloudy => new Color(0.55f, 0.58f, 0.62f),
+        Weather.Rain   => new Color(0.40f, 0.44f, 0.50f),
+        Weather.Snow   => new Color(0.78f, 0.82f, 0.86f),
+        _              => new Color(0.35f, 0.54f, 0.82f),
+    };
+
+    private static Color HorizonFor(Weather weather) => weather switch
+    {
+        Weather.Clear  => new Color(0.75f, 0.80f, 0.88f),
+        Weather.Cloudy => new Color(0.72f, 0.74f, 0.78f),
+        Weather.Rain   => new Color(0.55f, 0.58f, 0.62f),
+        Weather.Snow   => new Color(0.88f, 0.90f, 0.92f),
+        _              => new Color(0.75f, 0.80f, 0.88f),
     };
 }

@@ -222,25 +222,23 @@ public partial class Main : Node3D
         _prims = new PrimRenderer();
         AddChild(_prims);
 
-        // Checkered floor, generous size — scale cue + visual interest.
+        // Checkered floor — 200 m, bakes the check pattern into a
+        // 128x128 image at 4 tiles across, then repeats that 25x across
+        // the floor (~5 m per check).
         var floor = new MeshInstance3D
         {
             Mesh     = new PlaneMesh { Size = new Vector2(200f, 200f) },
             Position = Vector3.Zero,
         };
-        var checkerImg = Image.CreateEmpty(2, 2, false, Image.Format.Rgb8);
-        checkerImg.SetPixel(0, 0, new Color(0.58f, 0.58f, 0.60f));
-        checkerImg.SetPixel(1, 0, new Color(0.42f, 0.42f, 0.45f));
-        checkerImg.SetPixel(0, 1, new Color(0.42f, 0.42f, 0.45f));
-        checkerImg.SetPixel(1, 1, new Color(0.58f, 0.58f, 0.60f));
-        var checkerTex = ImageTexture.CreateFromImage(checkerImg);
         floor.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
         {
-            AlbedoTexture            = checkerTex,
-            TextureFilter            = BaseMaterial3D.TextureFilterEnum.Nearest,
-            Uv1Scale                 = new Vector3(50f, 50f, 1f),
-            Roughness                = 0.85f,
-            Metallic                 = 0.0f,
+            AlbedoTexture = BuildCheckerTexture(128, tilesPerSide: 4,
+                light: new Color(0.70f, 0.70f, 0.73f),
+                dark:  new Color(0.52f, 0.52f, 0.55f)),
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            Uv1Scale      = new Vector3(25f, 25f, 1f),
+            Roughness     = 0.85f,
+            Metallic      = 0.0f,
         });
         AddChild(floor);
 
@@ -274,6 +272,22 @@ public partial class Main : Node3D
         _yawPivot.AddChild(_pitchPivot);
         _pitchPivot.AddChild(camera);
         camera.LookAt(_cameraRig.GlobalPosition + Vector3.Up * 0.8f, Vector3.Up);
+    }
+
+    /// <summary>Bake a checker-pattern texture at runtime. `size` is pixels
+    /// per side; `tilesPerSide` is how many checks fit across the image.</summary>
+    private static ImageTexture BuildCheckerTexture(int size, int tilesPerSide, Color light, Color dark)
+    {
+        var img = Image.CreateEmpty(size, size, false, Image.Format.Rgb8);
+        var tilePx = size / tilesPerSide;
+        for (var y = 0; y < size; y++)
+        for (var x = 0; x < size; x++)
+        {
+            var isDark = ((x / tilePx) + (y / tilePx)) % 2 == 0;
+            img.SetPixel(x, y, isDark ? dark : light);
+        }
+        img.GenerateMipmaps();
+        return ImageTexture.CreateFromImage(img);
     }
 
     /// <summary>Quick decor: a ring of pillars + a central monolith so the
