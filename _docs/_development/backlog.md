@@ -91,6 +91,7 @@ explicitly decided to be *no replacement*.
 - [ ] Move domain types from surviving `Eden/Framework` into `Eden.Shared`
 - [ ] Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server
 - [ ] Implement wire protocol transport (server side) — WebTransport over QUIC via `System.Net.Quic`
+- [ ] Register custom MessagePack formatters for the `Eden.Shared` domain types (index-keyed, not property-name-keyed) — brings typical `AvatarState` from ~250 B down to ~100 B without polluting records with `[Key]` attributes
 - [ ] Replace config layer with `Microsoft.Extensions.Configuration`
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
 - [ ] Migrate MySQL.Data to MySqlConnector
