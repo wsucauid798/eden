@@ -86,16 +86,16 @@ explicitly decided to be *no replacement*.
 
 ## Phase 2 — Foundation
 
-- [ ] Create `Eden.Shared` project (domain types: `Vector3`, `AvatarState`, `Prim`, `ItemId`, etc.)
+- [x] ~~Create `Eden.Shared` project~~ Scaffolded at `Eden.Shared/` with `EdenVersion.cs` as anchor. Domain types will be added as wire-protocol work progresses.
+- [ ] Populate `Eden.Shared` with domain types: `Vector3`, `AvatarState`, `Prim`, `ItemId`, event shapes, wire messages
 - [ ] Move domain types from surviving `Eden/Framework` into `Eden.Shared`
 - [ ] Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server
-- [ ] Implement wire protocol transport (server side)
+- [ ] Implement wire protocol transport (server side) — WebTransport over QUIC via `System.Net.Quic`
 - [ ] Replace config layer with `Microsoft.Extensions.Configuration`
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
 - [ ] Migrate MySQL.Data to MySqlConnector
-- [ ] Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`
-- [ ] Bump target framework `net8_0` → `net10_0` in `prebuild.xml` (or in the new `.csproj` files after Prebuild is dropped); verify QUIC / WebTransport support
-- [ ] Stand up `System.Net.Quic` + WebTransport over Kestrel as the wire transport
+- [x] ~~Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`~~ Prebuild removed; all csproj files tracked as SDK-style, solution `Eden.sln` tracked. Central package management (`Directory.Packages.props`) deferred until HintPath refs are converted to PackageReferences.
+- [x] ~~Bump target framework `net8_0` → `net10_0`~~ Done across all csproj files; `global.json` pins SDK to 10.0.100+.
 - [ ] Pin monorepo layout — where `Eden.Shared`, `Eden.Server`, `Eden.Viewer` live relative to the surviving `Eden/` tree
 - [ ] Decide central package management (`Directory.Packages.props`) vs per-project `PackageReference`
 - [ ] Pick DI container — default to `Microsoft.Extensions.DependencyInjection` unless reason not to
