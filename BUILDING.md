@@ -16,10 +16,11 @@ dotnet build --configuration Release Eden.sln
 
 That's it. No prebuild step, no generator — the `.csproj` and `.sln` files are checked in.
 
-### One-time: trust the dev certificate
+### One-time: trust the dev certificate (only once host-mode lands)
 
-`Eden.Server` listens over HTTPS (required for HTTP/3 / WebTransport). Trust
-the ASP.NET Core dev cert once per machine:
+Host mode will serve QUIC/WebTransport over HTTPS, which needs a trusted
+certificate. When that lands, trust the ASP.NET Core dev cert once per
+machine:
 
 ```sh
 dotnet dev-certs https --trust
