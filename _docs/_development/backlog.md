@@ -94,6 +94,9 @@ explicitly decided to be *no replacement*.
 - [ ] Replace config layer with `Microsoft.Extensions.Configuration`
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
 - [ ] Migrate MySQL.Data to MySqlConnector
+- [ ] Replace `System.Drawing.Common` + `libgdiplus` with `SkiaSharp` (or `ImageSharp`) — drops the only native-library install step on Linux/macOS
+- [ ] Replace `Mono.Data.Sqlite` with `Microsoft.Data.Sqlite` (modern, maintained)
+- [ ] Audit `Mono.Cecil` usage — likely only Mono.Addins internals; should die with the Mono.Addins removal
 - [x] ~~Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`~~ Prebuild removed; all csproj files tracked as SDK-style, solution `Eden.sln` tracked. Central package management (`Directory.Packages.props`) deferred until HintPath refs are converted to PackageReferences.
 - [x] ~~Bump target framework `net8_0` → `net10_0`~~ Done across all csproj files; `global.json` pins SDK to 10.0.100+.
 - [ ] Pin monorepo layout — where `Eden.Shared`, `Eden.Server`, `Eden.Viewer` live relative to the surviving `Eden/` tree
