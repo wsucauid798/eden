@@ -14,59 +14,79 @@ namespace Eden.Launcher;
 public static class EdenLauncher
 {
     /// <summary>
-    /// Start an Eden server in the current process and return a transport
-    /// the caller can use to talk to it. No sockets, no serialisation hop —
+    /// Start an Eden server in the current process and return a transport the
+    /// caller can use to talk to it. No sockets, no serialisation hop —
     /// payloads move across two in-memory channels.
     /// </summary>
-    /// <returns>
-    /// <c>Transport</c> is the viewer-facing end; await the server's
-    /// lifetime via <c>Dispose</c> on the returned <see cref="SoloHandle"/>
-    /// to shut it down cleanly.
-    /// </returns>
     public static SoloHandle StartSolo(CancellationToken ct = default)
     {
-        var (viewerSide, serverSide) = InMemoryTransport.CreatePair();
-
         var server = new EdenServer(EdenId<WorldTag>.New());
-        var cts    = CancellationTokenSource.CreateLinkedTokenSource(ct);
-
-        var serverTask = Task.Run(() => server.RunAsync(serverSide, cts.Token), cts.Token);
-
-        return new SoloHandle(viewerSide, serverSide, serverTask, cts);
+        var handle = new SoloHandle(server, ct);
+        handle.Connect(); // first client — the caller-facing transport
+        return handle;
     }
 }
 
 /// <summary>
-/// Handle to a solo-mode Eden server running in the current process. Dispose
-/// to stop the server; the <see cref="Transport"/> becomes invalid after that.
+/// Handle to a solo-mode Eden server running in the current process. Exposes
+/// the initial viewer-facing transport. Additional clients (useful for tests)
+/// can be attached via <see cref="Connect"/>. Dispose to stop the server.
 /// </summary>
 public sealed class SoloHandle : IAsyncDisposable
 {
-    private readonly ITransport _serverSide;
-    private readonly Task _serverTask;
+    private readonly EdenServer _server;
     private readonly CancellationTokenSource _cts;
+    private readonly List<(ITransport serverSide, Task loop)> _attached = new();
 
-    public ITransport Transport { get; }
+    private ITransport? _primaryViewerSide;
 
-    internal SoloHandle(
-        ITransport transport,
-        ITransport serverSide,
-        Task serverTask,
-        CancellationTokenSource cts)
+    /// <summary>
+    /// The first viewer-side transport, handed back by
+    /// <see cref="EdenLauncher.StartSolo"/>.
+    /// </summary>
+    public ITransport Transport
+        => _primaryViewerSide ?? throw new InvalidOperationException(
+            "StartSolo must be invoked through EdenLauncher; don't construct SoloHandle directly.");
+
+    /// <summary>Number of currently-attached client transports.</summary>
+    public int ClientCount => _attached.Count;
+
+    internal SoloHandle(EdenServer server, CancellationToken ct)
     {
-        Transport   = transport;
-        _serverSide = serverSide;
-        _serverTask = serverTask;
-        _cts        = cts;
+        _server = server;
+        _cts    = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    }
+
+    /// <summary>
+    /// Create and attach a new in-memory client transport pair to the running
+    /// solo server. Returns the viewer-side transport.
+    /// </summary>
+    public ITransport Connect()
+    {
+        var (viewerSide, serverSide) = InMemoryTransport.CreatePair();
+        var loop = Task.Run(() => _server.HandleClientAsync(serverSide, _cts.Token), _cts.Token);
+        _attached.Add((serverSide, loop));
+        _primaryViewerSide ??= viewerSide;
+        return viewerSide;
     }
 
     public async ValueTask DisposeAsync()
     {
         _cts.Cancel();
-        await Transport.DisposeAsync().ConfigureAwait(false);
-        await _serverSide.DisposeAsync().ConfigureAwait(false);
-        try { await _serverTask.ConfigureAwait(false); }
-        catch (OperationCanceledException) { /* expected */ }
+
+        foreach (var (serverSide, _) in _attached)
+        {
+            try { await serverSide.DisposeAsync().ConfigureAwait(false); } catch { }
+        }
+        if (_primaryViewerSide is not null)
+            try { await _primaryViewerSide.DisposeAsync().ConfigureAwait(false); } catch { }
+
+        foreach (var (_, loop) in _attached)
+        {
+            try { await loop.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* expected */ }
+        }
+
         _cts.Dispose();
     }
 }
