@@ -37,14 +37,19 @@ jobs:
           # real project under @me. Stale values (e.g. from a failed run where
           # the PAT lacked write scope) would otherwise short-circuit us out
           # forever.
+          # gh project link does a literal string compare of --owner against
+          # the repo's owner login, so "@me" mismatches. Use the explicit
+          # login derived from REPO for the link call.
+          OWNER_LOGIN="${REPO%%/*}"
+
           if [[ -n "$EXISTING_NUMBER" ]]; then
             if gh project view "$EXISTING_NUMBER" --owner "@me" \
                  --format json >/dev/null 2>&1; then
               echo "PROJECT_NUMBER $EXISTING_NUMBER verified under @me"
-              # Re-link every run — idempotent, surfaces a useful error if
-              # the project isn't linked yet for any reason.
-              gh project link "$EXISTING_NUMBER" --owner "@me" --repo "$REPO" \
-                >/dev/null 2>&1 || true
+              # Re-link every run — idempotent, self-heals if linking was
+              # missed previously. Non-fatal if it fails.
+              gh project link "$EXISTING_NUMBER" --owner "$OWNER_LOGIN" \
+                --repo "$REPO" >/dev/null 2>&1 || true
               echo "number=$EXISTING_NUMBER" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -62,12 +67,16 @@ jobs:
 
           echo "Created Project #$N"
 
-          # Link the new project to the repo so it appears on the repo's
-          # Projects tab (Projects v2 are owned by users/orgs, not repos).
-          gh project link "$N" --owner "@me" --repo "$REPO"
-
+          # Persist the number FIRST so a link failure doesn't cause another
+          # fresh project to be created on the next run.
           gh variable set PROJECT_NUMBER --body "$N" --repo "$REPO"
           echo "number=$N" >> "$GITHUB_OUTPUT"
+
+          # Link the new project to the repo so it appears on the repo's
+          # Projects tab. Non-fatal — we already have a usable project.
+          if ! gh project link "$N" --owner "$OWNER_LOGIN" --repo "$REPO"; then
+            echo "WARN: failed to link Project #$N to $REPO — link manually if needed" >&2
+          fi
 
       - name: Sync backlog to issues + Project
         env:
