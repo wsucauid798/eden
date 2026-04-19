@@ -1,20 +1,24 @@
 using Eden.Scripting;
+using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
 
 namespace Eden.Server.Prims;
 
 /// <summary>
-/// Placeholder <see cref="IWorldContext"/> for MVP. Inventory / avatars /
-/// physics services throw <see cref="NotImplementedException"/> — a script
-/// that touches them on the server right now will fail loudly, which is
-/// preferable to silent no-ops. Flesh these out as Phase 3+ services arrive.
+/// Server-side <see cref="IWorldContext"/>. The world snapshot comes from a
+/// callback supplied by <c>EdenServer</c> so scripts always read the latest
+/// authoritative state. Inventory / avatars / physics services still stub
+/// with <see cref="NotImplementedException"/> — they fail loudly rather
+/// than silently, which is preferable while Phase 3 fills them in.
 /// </summary>
-internal sealed class ServerWorldContext : IWorldContext
+internal sealed class ServerWorldContext(Func<WorldState> worldSnapshot) : IWorldContext
 {
     public IInventoryApi Inventory { get; } = new NotYetImplementedInventory();
     public IAvatarApi    Avatars   { get; } = new NotYetImplementedAvatars();
     public IPhysicsApi   Physics   { get; } = new NotYetImplementedPhysics();
+
+    public WorldState World => worldSnapshot();
 
     public Task<Prim?> FindPrim(EdenId<PrimTag> id) => Task.FromResult<Prim?>(null);
 

@@ -330,6 +330,55 @@ public sealed class AvatarLeftFormatter : IMessagePackFormatter<AvatarLeft>
     }
 }
 
+public sealed class WorldStateFormatter : IMessagePackFormatter<WorldState>
+{
+    public static readonly WorldStateFormatter Instance = new();
+
+    public void Serialize(ref MessagePackWriter writer, WorldState value, MessagePackSerializerOptions options)
+    {
+        writer.WriteArrayHeader(6);
+        EdenIdFormatter<WorldTag>.Instance.Serialize(ref writer, value.WorldId, options);
+        writer.Write(value.Name);
+        writer.Write(value.TimeOfDayHours);
+        Vector3Formatter.Instance.Serialize(ref writer, value.Wind, options);
+        writer.Write((byte)value.Weather);
+        writer.Write(value.Gravity);
+    }
+
+    public WorldState Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    {
+        var count = reader.ReadArrayHeader();
+        if (count != 6)
+            throw new MessagePackSerializationException($"WorldState expects 6 elements, got {count}");
+        return new WorldState(
+            EdenIdFormatter<WorldTag>.Instance.Deserialize(ref reader, options),
+            reader.ReadString() ?? string.Empty,
+            reader.ReadSingle(),
+            Vector3Formatter.Instance.Deserialize(ref reader, options),
+            (Weather)reader.ReadByte(),
+            reader.ReadSingle());
+    }
+}
+
+public sealed class WorldStateUpdateFormatter : IMessagePackFormatter<WorldStateUpdate>
+{
+    public static readonly WorldStateUpdateFormatter Instance = new();
+
+    public void Serialize(ref MessagePackWriter writer, WorldStateUpdate value, MessagePackSerializerOptions options)
+    {
+        writer.WriteArrayHeader(1);
+        WorldStateFormatter.Instance.Serialize(ref writer, value.State, options);
+    }
+
+    public WorldStateUpdate Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    {
+        var count = reader.ReadArrayHeader();
+        if (count != 1)
+            throw new MessagePackSerializationException($"WorldStateUpdate expects 1 element, got {count}");
+        return new WorldStateUpdate(WorldStateFormatter.Instance.Deserialize(ref reader, options));
+    }
+}
+
 public sealed class ClientTouchPrimFormatter : IMessagePackFormatter<ClientTouchPrim>
 {
     public static readonly ClientTouchPrimFormatter Instance = new();

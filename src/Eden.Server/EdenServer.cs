@@ -29,28 +29,61 @@ public sealed class EdenServer : IAsyncDisposable
     /// <c>dt</c>; caller's wall-clock drift is absorbed by the timer.</summary>
     private static readonly TimeSpan PhysicsStep = TimeSpan.FromMilliseconds(1000.0 / 60.0);
 
+    /// <summary>World-clock tick period. 1 Hz — time of day, weather, wind
+    /// all evolve slowly enough that 1 Hz broadcasts are plenty. Finer
+    /// viewer interpolation is a viewer concern.</summary>
+    private static readonly TimeSpan WorldClockStep = TimeSpan.FromSeconds(1);
+
     private readonly EdenId<WorldTag> _worldId;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<EdenServer> _logger;
     private readonly DateTime _startedUtc = DateTime.UtcNow;
     private readonly BehaviorHost _behaviorHost;
-    private readonly IWorldContext _worldContext = new ServerWorldContext();
+    private readonly IWorldContext _worldContext;
     private readonly PhysicsWorld _physics;
     private readonly CancellationTokenSource _shutdownCts = new();
     private readonly Task _physicsLoop;
+    private readonly Task _worldClockLoop;
+    private readonly float _dayLengthSeconds;
+    private readonly object _worldLock = new();
+    private WorldState _world;
     private readonly ConcurrentDictionary<EdenId<SessionTag>, ClientSession> _sessions = new();
     private readonly ConcurrentDictionary<EdenId<UserTag>,    AvatarState>   _avatars  = new();
     private readonly ConcurrentDictionary<EdenId<PrimTag>,    ServerPrim>    _prims    = new();
     private int _disposed;
 
-    public EdenServer(EdenId<WorldTag> worldId, ILoggerFactory? loggerFactory = null)
+    public EdenServer(
+        EdenId<WorldTag>  worldId,
+        ILoggerFactory?   loggerFactory = null,
+        WorldConfig?      worldConfig   = null)
     {
         _worldId       = worldId;
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger        = _loggerFactory.CreateLogger<EdenServer>();
         _behaviorHost  = new BehaviorHost(_loggerFactory);
         _physics       = new PhysicsWorld(_loggerFactory.CreateLogger<PhysicsWorld>());
-        _physicsLoop   = Task.Run(() => PhysicsLoopAsync(_shutdownCts.Token));
+
+        var cfg = worldConfig ?? new WorldConfig();
+        _dayLengthSeconds = cfg.DayLengthSeconds > 0 ? cfg.DayLengthSeconds : 24f * 60f;
+        _world = new WorldState(
+            WorldId:        worldId,
+            Name:           cfg.Name,
+            TimeOfDayHours: cfg.StartHoursOfDay,
+            Wind:           cfg.InitialWind,
+            Weather:        cfg.InitialWeather,
+            Gravity:        cfg.Gravity);
+        _worldContext   = new ServerWorldContext(() => WorldSnapshot);
+
+        _physicsLoop    = Task.Run(() => PhysicsLoopAsync(_shutdownCts.Token));
+        _worldClockLoop = Task.Run(() => WorldClockLoopAsync(_shutdownCts.Token));
+    }
+
+    /// <summary>Read-only snapshot of the current authoritative world state.
+    /// Callers outside the server (tests, admin tools) use this; scripts
+    /// read via <c>IWorldContext.World</c>.</summary>
+    public WorldState WorldSnapshot
+    {
+        get { lock (_worldLock) return _world; }
     }
 
     public int SessionCount => _sessions.Count;
@@ -282,6 +315,11 @@ public sealed class EdenServer : IAsyncDisposable
                 ct).ConfigureAwait(false);
         }
 
+        // Current world state so the viewer can paint sky/weather immediately.
+        await transport.SendAsync(
+            Envelope.Encode(MessageKind.WorldStateUpdate, new WorldStateUpdate(WorldSnapshot)),
+            ct).ConfigureAwait(false);
+
         // 3) Announce the newcomer to everyone else.
         await BroadcastExceptAsync(sessionId, MessageKind.AvatarUpdate, new AvatarUpdate(initialAvatar), ct);
 
@@ -354,6 +392,45 @@ public sealed class EdenServer : IAsyncDisposable
         }
     }
 
+    private async Task WorldClockLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(WorldClockStep);
+        // Real seconds per game-hour: dayLength / 24. Invert for game-hours per real-second.
+        var gameHoursPerRealSecond = 24f / _dayLengthSeconds;
+        var stepHours = gameHoursPerRealSecond * (float)WorldClockStep.TotalSeconds;
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+            {
+                WorldState snapshot;
+                lock (_worldLock)
+                {
+                    var t = _world.TimeOfDayHours + stepHours;
+                    if (t >= 24f) t -= 24f;
+                    _world = _world with { TimeOfDayHours = t };
+                    snapshot = _world;
+                }
+
+                try
+                {
+                    await BroadcastAsync(MessageKind.WorldStateUpdate, new WorldStateUpdate(snapshot), ct)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "WorldState broadcast failed");
+                }
+            }
+        }
+        catch (OperationCanceledException) { /* shutdown */ }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "World-clock loop crashed");
+        }
+    }
+
     private async Task PhysicsLoopAsync(CancellationToken ct)
     {
         using var timer = new PeriodicTimer(PhysicsStep);
@@ -403,7 +480,8 @@ public sealed class EdenServer : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         _shutdownCts.Cancel();
-        try { await _physicsLoop.ConfigureAwait(false); } catch (OperationCanceledException) { }
+        try { await _physicsLoop.ConfigureAwait(false); }    catch (OperationCanceledException) { }
+        try { await _worldClockLoop.ConfigureAwait(false); } catch (OperationCanceledException) { }
 
         // Detach every attached behavior before tearing down the physics world
         // so their OnDisable runs against a still-valid context.

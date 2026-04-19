@@ -1,3 +1,4 @@
+using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
 
@@ -47,6 +48,11 @@ public interface IWorldContext
     IInventoryApi Inventory { get; }
     IAvatarApi    Avatars   { get; }
     IPhysicsApi   Physics   { get; }
+
+    /// <summary>Current snapshot of world-wide state — name, time of day,
+    /// wind, weather, gravity. The server owns this and advances it; reads
+    /// are cheap and always see the latest broadcast tick.</summary>
+    WorldState World { get; }
 
     /// <summary>Look up a prim by id. Returns null if it no longer exists.</summary>
     Task<Prim?> FindPrim(EdenId<PrimTag> id);

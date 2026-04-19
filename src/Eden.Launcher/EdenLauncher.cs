@@ -3,6 +3,7 @@ using System.Net.Quic;
 using System.Net.Security;
 using Eden.Launcher.Quic;
 using Eden.Server;
+using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Transport;
 using Eden.Shared.Wire;
@@ -30,10 +31,13 @@ public static class EdenLauncher
     /// No sockets, no serialisation hop — payloads move across two in-memory
     /// channels. Use this for the &quot;Just me&quot; mode of the launcher.
     /// </summary>
-    public static SoloHandle StartSolo(ILoggerFactory? loggerFactory = null, CancellationToken ct = default)
+    public static SoloHandle StartSolo(
+        ILoggerFactory?   loggerFactory = null,
+        WorldConfig?      worldConfig   = null,
+        CancellationToken ct            = default)
     {
         var factory = loggerFactory ?? NullLoggerFactory.Instance;
-        var server = new EdenServer(EdenId<WorldTag>.New(), factory);
+        var server = new EdenServer(EdenId<WorldTag>.New(), factory, worldConfig);
         var handle = new SoloHandle(server, ct);
         handle.Connect();
         return handle;
@@ -45,14 +49,15 @@ public static class EdenLauncher
     /// friends or to the public internet. Returns when the listener is ready.
     /// </summary>
     public static async Task<HostHandle> StartHostAsync(
-        int port,
-        ILoggerFactory? loggerFactory = null,
-        CancellationToken ct = default)
+        int               port,
+        ILoggerFactory?   loggerFactory = null,
+        WorldConfig?      worldConfig   = null,
+        CancellationToken ct            = default)
     {
         var factory = loggerFactory ?? NullLoggerFactory.Instance;
         var logger  = factory.CreateLogger(typeof(EdenLauncher).FullName!);
         var cert = DevCert.CreateSelfSigned();
-        var server = new EdenServer(EdenId<WorldTag>.New(), factory);
+        var server = new EdenServer(EdenId<WorldTag>.New(), factory, worldConfig);
         var hostCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         var listenerOptions = new QuicListenerOptions

@@ -1,4 +1,5 @@
 using Eden.Scripting;
+using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
 
@@ -53,6 +54,9 @@ internal sealed class MockWorld : IWorldContext
     public IInventoryApi Inventory { get; } = new MockInventory();
     public IAvatarApi    Avatars   { get; } = new MockAvatars();
     public IPhysicsApi   Physics   { get; } = new MockPhysics();
+    public WorldState    World     { get; set; } = new(
+        EdenId<WorldTag>.New(), "Test World", TimeOfDayHours: 8f,
+        Wind: Vector3.Zero, Weather: Weather.Clear, Gravity: 9.81f);
 
     public Task<Prim?> FindPrim(EdenId<PrimTag> id) => Task.FromResult<Prim?>(null);
     public async IAsyncEnumerable<Prim> PrimsNear(Vector3 center, float radius)

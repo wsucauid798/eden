@@ -58,12 +58,20 @@ public class SoloLauncherTests
         var sent = new Ping(ClientTicks: 12345);
         await handle.Transport.SendAsync(Envelope.Encode(MessageKind.Ping, sent));
 
-        var frame = await handle.Transport.ReceiveAsync();
-        Assert.Equal(MessageKind.Pong, Envelope.PeekKind(frame!.Value));
+        // Post-handshake the server has broadcast existing prims + initial
+        // WorldStateUpdate into the pipe. Skip past them to find our Pong.
+        Pong? pong = null;
+        for (int i = 0; i < 10 && pong is null; i++)
+        {
+            var frame = await handle.Transport.ReceiveAsync();
+            Assert.NotNull(frame);
+            if (Envelope.PeekKind(frame.Value) == MessageKind.Pong)
+                pong = Envelope.DecodePayload<Pong>(frame.Value);
+        }
 
-        var pong = Envelope.DecodePayload<Pong>(frame.Value);
-        Assert.Equal(sent.ClientTicks, pong.ClientTicks);
-        Assert.True(pong.ServerTicks > 0);
+        Assert.NotNull(pong);
+        Assert.Equal(sent.ClientTicks, pong.Value.ClientTicks);
+        Assert.True(pong.Value.ServerTicks > 0);
     }
 
     [Fact]

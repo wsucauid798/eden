@@ -14,9 +14,10 @@ public enum MessageKind : byte
     ServerHello  = 2,
 
     // --- World state ---
-    AvatarUpdate = 10,
-    PrimUpdate   = 11,
-    AvatarLeft   = 12,
+    AvatarUpdate     = 10,
+    PrimUpdate       = 11,
+    AvatarLeft       = 12,
+    WorldStateUpdate = 13,
 
     // --- Chat ---
     ChatMessage  = 20,

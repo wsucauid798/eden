@@ -56,6 +56,12 @@ public sealed class ViewerClient : IAsyncDisposable
     /// Updates are pushed via <see cref="PrimUpdated"/>.</summary>
     public IReadOnlyDictionary<EdenId<PrimTag>, PrimState> RemotePrims => _remotePrims;
 
+    /// <summary>The latest authoritative world state the server has sent us
+    /// (name, time of day, wind, weather, gravity). <c>null</c> until the
+    /// first <see cref="WorldStateUpdate"/> arrives — which is immediately
+    /// after <see cref="ConnectAsync"/>.</summary>
+    public WorldState? RemoteWorldState { get; private set; }
+
     /// <summary>Raised when an avatar's state arrives (join or movement).</summary>
     public event Action<AvatarState>? AvatarUpdated;
 
@@ -64,6 +70,9 @@ public sealed class ViewerClient : IAsyncDisposable
 
     /// <summary>Raised when a prim's state arrives (spawn or mutation).</summary>
     public event Action<PrimState>? PrimUpdated;
+
+    /// <summary>Raised when the server broadcasts a new world-state snapshot.</summary>
+    public event Action<WorldState>? WorldStateChanged;
 
     /// <summary>Raised when chat is received from the server. The sender's
     /// own chat also fires this event — the server broadcasts to all sessions.</summary>
@@ -172,6 +181,12 @@ public sealed class ViewerClient : IAsyncDisposable
                 var prim = Envelope.DecodePayload<PrimUpdate>(frame);
                 _remotePrims[prim.State.Id] = prim.State;
                 PrimUpdated?.Invoke(prim.State);
+                break;
+
+            case MessageKind.WorldStateUpdate:
+                var world = Envelope.DecodePayload<WorldStateUpdate>(frame);
+                RemoteWorldState = world.State;
+                WorldStateChanged?.Invoke(world.State);
                 break;
 
             case MessageKind.ChatMessage:
