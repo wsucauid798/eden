@@ -87,18 +87,35 @@ find_issue_url() {
      <<<"$existing_issues_json"
 }
 
+# For close-on-tick, match exactly first; if not found, fall back to a
+# prefix match. The backlog may use ~~short title~~ where the full issue
+# title has trailing detail (e.g. "(domain types: Vector3, ...)").
 find_issue_number() {
   local title="$1"
-  jq -r --arg t "$title" \
-     'map(select(.title == $t) | .number) | .[0] // empty' \
-     <<<"$existing_issues_json"
+  local n
+  n=$(jq -r --arg t "$title" \
+       'map(select(.title == $t) | .number) | .[0] // empty' \
+       <<<"$existing_issues_json")
+  if [[ -z "$n" ]]; then
+    n=$(jq -r --arg t "$title" \
+         'map(select(.title | startswith($t)) | .number) | .[0] // empty' \
+         <<<"$existing_issues_json")
+  fi
+  echo "$n"
 }
 
 find_issue_state() {
   local title="$1"
-  jq -r --arg t "$title" \
-     'map(select(.title == $t) | .state) | .[0] // empty' \
-     <<<"$existing_issues_json"
+  local s
+  s=$(jq -r --arg t "$title" \
+       'map(select(.title == $t) | .state) | .[0] // empty' \
+       <<<"$existing_issues_json")
+  if [[ -z "$s" ]]; then
+    s=$(jq -r --arg t "$title" \
+         'map(select(.title | startswith($t)) | .state) | .[0] // empty' \
+         <<<"$existing_issues_json")
+  fi
+  echo "$s"
 }
 
 url_in_project() {
