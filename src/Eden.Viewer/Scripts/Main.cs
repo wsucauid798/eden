@@ -110,18 +110,14 @@ public partial class Main : Node3D
 
         switch (@event)
         {
-            case InputEventMouseMotion mm when Input.MouseMode == Input.MouseModeEnum.Captured:
+            // Hold right mouse button to rotate the camera. Mouse is never
+            // captured — the cursor stays free for clicking and for the OS.
+            case InputEventMouseMotion mm when Input.IsMouseButtonPressed(MouseButton.Right):
                 _yaw   -= mm.Relative.X * MouseSensitivity;
                 _pitch  = Mathf.Clamp(_pitch - mm.Relative.Y * MouseSensitivity,
                                       -Mathf.Pi / 2 + 0.1f, Mathf.Pi / 4);
                 if (_yawPivot   is not null) _yawPivot.Rotation   = new Vector3(0, _yaw, 0);
                 if (_pitchPivot is not null) _pitchPivot.Rotation = new Vector3(_pitch, 0, 0);
-                break;
-
-            case InputEventKey { Pressed: true, Keycode: Key.Escape }:
-                Input.MouseMode = Input.MouseMode == Input.MouseModeEnum.Captured
-                    ? Input.MouseModeEnum.Visible
-                    : Input.MouseModeEnum.Captured;
                 break;
 
             case InputEventMouseButton { Pressed: true } mb:
@@ -135,12 +131,8 @@ public partial class Main : Node3D
                         _cameraDistance = Mathf.Min(MaxCameraDistance, _cameraDistance + ZoomStep);
                         UpdateCameraOffset();
                         break;
-                    case MouseButton.Left when Input.MouseMode == Input.MouseModeEnum.Captured:
+                    case MouseButton.Left:
                         await TryClickTouchAsync();
-                        break;
-                    default:
-                        if (Input.MouseMode == Input.MouseModeEnum.Visible)
-                            Input.MouseMode = Input.MouseModeEnum.Captured;
                         break;
                 }
                 break;
@@ -244,7 +236,6 @@ public partial class Main : Node3D
         }
 
         await SendCurrentPoseAsync();
-        Input.MouseMode = Input.MouseModeEnum.Captured;
     }
 
     private async Task<ITransport> ResolveTransportAsync(string mode)
