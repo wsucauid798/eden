@@ -1,10 +1,13 @@
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using Eden.Client;
 using Eden.Launcher;
 using Eden.Shared.Entities;
 using Eden.Shared.Ids;
+using Eden.Shared.Transport;
 
 // `Vector3` in this file means Godot.Vector3. Eden's wire-format math types
 // live in Eden.Shared.Math and are fully-qualified at the send/receive boundary.
@@ -12,24 +15,33 @@ using Eden.Shared.Ids;
 namespace Eden.Viewer;
 
 /// <summary>
-/// Root scene built entirely in code — no .tscn scene content needed. On
-/// start, brings up Eden in solo mode, wires the player cube to WASD input,
-/// and renders other avatars as orange cubes driven by the server's
-/// broadcast stream.
+/// Root scene built entirely in code — no .tscn scene content needed.
+/// <para>
+/// Mode is picked from command-line args:
+/// <list type="bullet">
+///   <item><c>(none)</c> — solo: in-process server, private world.</item>
+///   <item><c>--host [--port N]</c> — runs a QUIC listener so other viewers
+///   can join; the host itself is an in-process client.</item>
+///   <item><c>--join HOST[:PORT]</c> — connects to an existing host.</item>
+/// </list>
+/// In Godot, pass args after <c>--</c>: e.g. <c>godot --path Eden.Viewer -- --host</c>.
+/// </para>
 /// </summary>
 public partial class Main : Node3D
 {
     private const float  MoveSpeed    = 5f;
     private const double SendHz       = 20.0;
+    private const int    DefaultPort  = 5001;
     private readonly double _sendInterval = 1.0 / SendHz;
 
     private SoloHandle?   _solo;
+    private HostHandle?   _host;
     private ViewerClient? _client;
     private MeshInstance3D? _playerCube;
 
-    private readonly Dictionary<EdenId<UserTag>, MeshInstance3D> _remoteCubes = new();
-    private readonly ConcurrentQueue<AvatarState>           _pendingUpdates = new();
-    private readonly ConcurrentQueue<EdenId<UserTag>>        _pendingLeaves  = new();
+    private readonly Dictionary<EdenId<UserTag>, MeshInstance3D> _remoteCubes    = new();
+    private readonly ConcurrentQueue<AvatarState>                _pendingUpdates = new();
+    private readonly ConcurrentQueue<EdenId<UserTag>>            _pendingLeaves  = new();
 
     private double _sendAccumulator;
 
@@ -43,19 +55,16 @@ public partial class Main : Node3D
 
     private void BuildScene()
     {
-        // Camera pulled back and up, looking at origin.
         var camera = new Camera3D { Position = new Vector3(0f, 4f, 8f) };
         camera.LookAt(Vector3.Zero, Vector3.Up);
         AddChild(camera);
 
-        // Sun-like directional light.
         var light = new DirectionalLight3D
         {
             Rotation = new Vector3(-Mathf.Pi / 4f, -Mathf.Pi / 6f, 0f),
         };
         AddChild(light);
 
-        // A simple floor grid.
         var floor = new MeshInstance3D
         {
             Mesh     = new PlaneMesh { Size = new Vector2(40f, 40f) },
@@ -67,7 +76,6 @@ public partial class Main : Node3D
         });
         AddChild(floor);
 
-        // Player cube — blue, sits on the floor at origin.
         _playerCube = new MeshInstance3D
         {
             Mesh     = new BoxMesh { Size = Vector3.One },
@@ -84,11 +92,9 @@ public partial class Main : Node3D
 
     private async Task StartEdenAsync()
     {
-        _solo   = EdenLauncher.StartSolo();
-        _client = new ViewerClient(_solo.Transport);
+        var transport = await ResolveTransportAsync();
 
-        // ViewerClient events fire from a background task; push into queues
-        // and apply on the main thread in _Process.
+        _client = new ViewerClient(transport);
         _client.AvatarUpdated += state  => _pendingUpdates.Enqueue(state);
         _client.AvatarLeft    += userId => _pendingLeaves.Enqueue(userId);
 
@@ -96,6 +102,58 @@ public partial class Main : Node3D
         GD.Print($"[Eden] connected. My UserId = {_client.MyUserId}");
 
         await SendCurrentPoseAsync();
+    }
+
+    private async Task<ITransport> ResolveTransportAsync()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int port = ParsePort(args);
+
+        if (args.Any(a => a.Equals("--host", System.StringComparison.OrdinalIgnoreCase)))
+        {
+            _host = await EdenLauncher.StartHostAsync(port);
+            GD.Print($"[Eden] hosting on port {_host.LocalEndPoint.Port}");
+            return _host.Transport;
+        }
+
+        var joinArg = args.FirstOrDefault(a => a.StartsWith("--join", System.StringComparison.OrdinalIgnoreCase));
+        if (joinArg is not null)
+        {
+            var target = ExtractJoinTarget(args, joinArg);
+            var (host, joinPort) = ParseHostPort(target, port);
+            GD.Print($"[Eden] joining {host}:{joinPort}");
+            return await EdenLauncher.ConnectAsync(host, joinPort);
+        }
+
+        _solo = EdenLauncher.StartSolo();
+        GD.Print("[Eden] solo mode");
+        return _solo.Transport;
+    }
+
+    private static int ParsePort(string[] args)
+    {
+        var i = System.Array.FindIndex(args, a => a.Equals("--port", System.StringComparison.OrdinalIgnoreCase));
+        if (i >= 0 && i + 1 < args.Length && int.TryParse(args[i + 1], out var p))
+            return p;
+        return DefaultPort;
+    }
+
+    private static string ExtractJoinTarget(string[] args, string joinArg)
+    {
+        // Support both `--join host:port` and `--join=host:port`.
+        var eq = joinArg.IndexOf('=');
+        if (eq >= 0) return joinArg[(eq + 1)..];
+        var i = System.Array.IndexOf(args, joinArg);
+        if (i >= 0 && i + 1 < args.Length) return args[i + 1];
+        return "localhost";
+    }
+
+    private static (string host, int port) ParseHostPort(string target, int defaultPort)
+    {
+        var colon = target.LastIndexOf(':');
+        if (colon > 0 && int.TryParse(target[(colon + 1)..], out var p))
+            return (target[..colon], p);
+        return (target, defaultPort);
     }
 
     // ---- per-frame ----
@@ -181,5 +239,6 @@ public partial class Main : Node3D
     {
         if (_client is not null) await _client.DisposeAsync();
         if (_solo   is not null) await _solo.DisposeAsync();
+        if (_host   is not null) await _host.DisposeAsync();
     }
 }

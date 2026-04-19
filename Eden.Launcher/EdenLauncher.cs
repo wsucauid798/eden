@@ -68,7 +68,17 @@ public static class EdenLauncher
 
         var acceptTask = Task.Run(() => AcceptLoopAsync(listener, server, hostCts.Token), hostCts.Token);
 
-        return new HostHandle(listener, server, hostCts, acceptTask, cert);
+        // Attach an in-process client so the host itself has a seat in the
+        // world (no wasted QUIC loopback). Remote clients use QuicTransport;
+        // the host uses InMemoryTransport.
+        var (hostViewerSide, hostServerSide) = InMemoryTransport.CreatePair();
+        var hostLoop = Task.Run(
+            () => server.HandleClientAsync(hostServerSide, hostCts.Token),
+            hostCts.Token);
+
+        return new HostHandle(
+            listener, server, hostCts, acceptTask, cert,
+            hostViewerSide, hostServerSide, hostLoop);
     }
 
     /// <summary>
@@ -199,32 +209,49 @@ public sealed class HostHandle : IAsyncDisposable
     private readonly Task _acceptTask;
     private readonly System.Security.Cryptography.X509Certificates.X509Certificate2 _cert;
 
+    private readonly ITransport _hostServerSide;
+    private readonly Task _hostLoop;
+
     /// <summary>The server instance backing this host.</summary>
     public EdenServer Server { get; }
 
-    /// <summary>The endpoint the listener is bound to. Useful for tests that
-    /// ask for port 0 and need the actually-chosen port.</summary>
+    /// <summary>The endpoint the listener is bound to.</summary>
     public IPEndPoint LocalEndPoint => _listener.LocalEndPoint;
+
+    /// <summary>
+    /// The host's own viewer-facing transport. Wired in-process to the
+    /// server — the host is &quot;a player too,&quot; with no QUIC loopback.
+    /// </summary>
+    public ITransport Transport { get; }
 
     internal HostHandle(
         QuicListener listener,
         EdenServer server,
         CancellationTokenSource cts,
         Task acceptTask,
-        System.Security.Cryptography.X509Certificates.X509Certificate2 cert)
+        System.Security.Cryptography.X509Certificates.X509Certificate2 cert,
+        ITransport hostViewerSide,
+        ITransport hostServerSide,
+        Task hostLoop)
     {
-        _listener   = listener;
-        Server      = server;
-        _cts        = cts;
-        _acceptTask = acceptTask;
-        _cert       = cert;
+        _listener       = listener;
+        Server          = server;
+        _cts            = cts;
+        _acceptTask     = acceptTask;
+        _cert           = cert;
+        Transport       = hostViewerSide;
+        _hostServerSide = hostServerSide;
+        _hostLoop       = hostLoop;
     }
 
     public async ValueTask DisposeAsync()
     {
         _cts.Cancel();
         try { await _listener.DisposeAsync().ConfigureAwait(false); } catch { }
+        try { await Transport.DisposeAsync().ConfigureAwait(false); } catch { }
+        try { await _hostServerSide.DisposeAsync().ConfigureAwait(false); } catch { }
         try { await _acceptTask.ConfigureAwait(false); } catch (OperationCanceledException) { }
+        try { await _hostLoop.ConfigureAwait(false); }    catch (OperationCanceledException) { }
         _cert.Dispose();
         _cts.Dispose();
     }
