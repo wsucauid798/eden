@@ -21,6 +21,7 @@ public sealed class ViewerClient : IAsyncDisposable
     private readonly ITransport _transport;
     private readonly ILogger<ViewerClient> _logger;
     private readonly ConcurrentDictionary<EdenId<UserTag>, AvatarState> _remoteAvatars = new();
+    private readonly ConcurrentDictionary<EdenId<PrimTag>, PrimState>   _remotePrims   = new();
     private readonly CancellationTokenSource _cts = new();
 
     private ServerHello? _session;
@@ -51,11 +52,18 @@ public sealed class ViewerClient : IAsyncDisposable
     /// </summary>
     public IReadOnlyDictionary<EdenId<UserTag>, AvatarState> RemoteAvatars => _remoteAvatars;
 
+    /// <summary>Read-only view of every prim the server has told us about.
+    /// Updates are pushed via <see cref="PrimUpdated"/>.</summary>
+    public IReadOnlyDictionary<EdenId<PrimTag>, PrimState> RemotePrims => _remotePrims;
+
     /// <summary>Raised when an avatar's state arrives (join or movement).</summary>
     public event Action<AvatarState>? AvatarUpdated;
 
     /// <summary>Raised when an avatar disconnects.</summary>
     public event Action<EdenId<UserTag>>? AvatarLeft;
+
+    /// <summary>Raised when a prim's state arrives (spawn or mutation).</summary>
+    public event Action<PrimState>? PrimUpdated;
 
     /// <summary>
     /// Complete the handshake with the server and start the background
@@ -146,6 +154,12 @@ public sealed class ViewerClient : IAsyncDisposable
                 var left = Envelope.DecodePayload<AvatarLeft>(frame);
                 _remoteAvatars.TryRemove(left.UserId, out _);
                 AvatarLeft?.Invoke(left.UserId);
+                break;
+
+            case MessageKind.PrimUpdate:
+                var prim = Envelope.DecodePayload<PrimUpdate>(frame);
+                _remotePrims[prim.State.Id] = prim.State;
+                PrimUpdated?.Invoke(prim.State);
                 break;
 
             // Ping/Pong and other kinds not handled by the mirror.

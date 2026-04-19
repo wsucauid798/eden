@@ -1,18 +1,23 @@
 using Eden.Scripting.Host;
+using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
 
 namespace Eden.Server.Core.Prims;
 
 /// <summary>
-/// A prim living in the server's world registry. Holds its mutable pose
-/// and, optionally, a handle to an attached <see cref="EdenBehavior"/>
-/// (that's how touches, collisions, etc. reach script code).
+/// A prim living in the server's world registry. Carries everything
+/// <see cref="PrimState"/> needs so the server can broadcast updates whenever
+/// a field changes, plus an optional attached behavior handle.
 /// </summary>
 internal sealed class ServerPrim(EdenId<PrimTag> id, EdenId<UserTag> ownerId)
 {
     private readonly object _lock = new();
-    private Transform _pose = Transform.Identity;
+    private Transform        _pose      = Transform.Identity;
+    private Vector3          _scale     = Vector3.One;
+    private EdenId<AssetTag> _shape     = EdenId<AssetTag>.Empty;
+    private Color            _tint      = Color.White;
+    private PrimFlags        _flags     = PrimFlags.None;
 
     public EdenId<PrimTag> Id      { get; } = id;
     public EdenId<UserTag> OwnerId { get; } = ownerId;
@@ -23,5 +28,35 @@ internal sealed class ServerPrim(EdenId<PrimTag> id, EdenId<UserTag> ownerId)
         set { lock (_lock) _pose = value; }
     }
 
+    public Vector3 Scale
+    {
+        get { lock (_lock) return _scale; }
+        set { lock (_lock) _scale = value; }
+    }
+
+    public EdenId<AssetTag> ShapeAssetId
+    {
+        get { lock (_lock) return _shape; }
+        set { lock (_lock) _shape = value; }
+    }
+
+    public Color TintColor
+    {
+        get { lock (_lock) return _tint; }
+        set { lock (_lock) _tint = value; }
+    }
+
+    public PrimFlags Flags
+    {
+        get { lock (_lock) return _flags; }
+        set { lock (_lock) _flags = value; }
+    }
+
     public BehaviorHandle? Behavior { get; set; }
+
+    public PrimState ToPrimState()
+    {
+        lock (_lock)
+            return new PrimState(Id, OwnerId, _pose, _scale, _shape, _tint, _flags);
+    }
 }

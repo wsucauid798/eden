@@ -58,15 +58,21 @@ public sealed class EdenServer
         var prim   = new ServerPrim(primId, EdenId<UserTag>.Empty);
         _prims[primId] = prim;
 
-        var self   = new ServerSelfContext(prim);
+        var self   = new ServerSelfContext(prim, BroadcastPrimUpdateAsync);
         var handle = await _behaviorHost.AttachAsync(behavior, self, _worldContext, ct)
             .ConfigureAwait(false);
         prim.Behavior = handle;
+
+        // Tell every connected viewer this prim exists in its initial state.
+        await BroadcastPrimUpdateAsync(prim.ToPrimState()).ConfigureAwait(false);
 
         _logger.LogInformation("Spawned prim {PrimId} with behavior {Behavior}",
             primId, behavior.GetType().Name);
         return (primId, handle);
     }
+
+    private Task BroadcastPrimUpdateAsync(PrimState state) =>
+        BroadcastAsync(MessageKind.PrimUpdate, new PrimUpdate(state));
 
     /// <summary>Read a prim's current pose. Throws if the prim id is unknown.</summary>
     public Transform GetPrimPose(EdenId<PrimTag> id) =>
@@ -212,12 +218,19 @@ public sealed class EdenServer
             ct).ConfigureAwait(false);
 
         // 2) Sync existing world to the newcomer (one AvatarUpdate per
-        //    avatar already present — *excluding* their own).
+        //    avatar already present — *excluding* their own — plus one
+        //    PrimUpdate per prim in the registry).
         foreach (var existing in _avatars.Values)
         {
             if (existing.UserId == userId) continue;
             await transport.SendAsync(
                 Envelope.Encode(MessageKind.AvatarUpdate, new AvatarUpdate(existing)),
+                ct).ConfigureAwait(false);
+        }
+        foreach (var prim in _prims.Values)
+        {
+            await transport.SendAsync(
+                Envelope.Encode(MessageKind.PrimUpdate, new PrimUpdate(prim.ToPrimState())),
                 ct).ConfigureAwait(false);
         }
 
