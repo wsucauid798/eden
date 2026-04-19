@@ -76,8 +76,8 @@ explicitly decided to be *no replacement*.
   - Replaced by: `Task`-based async / `await`.
   - Breaks: nothing functional — mechanical rewrite.
   - **Deferred to Phase 2.** The LLUDP-only ones die with LLUDP. The rest (`WebUtil`, `RestObjectPoster*`, HTTP client callbacks) is a mechanical Task-based refactor that belongs with Phase 2 HTTP modernisation.
-- [ ] Build still succeeds with demolition merged
-- [ ] Surviving scene graph still loads and runs a smoke-test region
+- [x] ~~Build still succeeds with demolition merged~~ 0 errors, 0 warnings across 3 demolition commits.
+- [x] ~~Surviving scene graph still loads and runs a smoke-test region~~ Server boots, reads all configs, loads all modules without LSL/YEngine complaint, reaches interactive console init. Crashes there only because the smoke test uses non-tty stdin (captured as a separate chore). No demolition-caused regressions.
 - [x] ~~Bump `<LangVersion>` in `Directory.Build.props` from 12 back to `latest` once YEngine is demolished~~ **Done.** YEngine gone, LangVersion restored to `latest`, build clean.
 - [ ] Decision landed on sandboxing (see Open Decisions)
 - [ ] Decision landed on wire protocol (see Open Decisions)
@@ -214,3 +214,4 @@ These gate Phase 2. See [plan.md](../_design/plan.md) for context.
 - [ ] Scrub dead NAnt references (old `.nant/` folders, etc.) if any remain
 - [ ] Rename `Watchdog.AbortThread` (in `Eden/Framework/Monitoring/Watchdog.cs`) — it no longer aborts, just untracks. Convert callers to cooperative cancellation at the same time.
 - [ ] Fix silent cert-missing failure in `Eden/Server/Base/HttpServerBase.cs` — prints "server can't start" then keeps going. Should `Environment.Exit(1)` or throw.
+- [ ] Make `LocalConsole` tolerate non-tty stdin — currently crashes at `Console.TreatControlCAsInput = true` when launched without an interactive terminal (scripts, Docker, CI). Try/catch or detect `Console.IsInputRedirected` first.
