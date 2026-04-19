@@ -31,6 +31,7 @@ public partial class Main : Node3D
 {
     private const float  MoveSpeed        = 4f;
     private const float  SprintMultiplier = 2.5f;
+    private const float  TurnSpeed        = 10f;   // rad/s — how fast the avatar yaws toward the movement direction
     private const float  JumpVelocity     = 6f;
     private const float  Gravity          = 18f;
     private const float  FlySpeed         = 6f;
@@ -546,7 +547,14 @@ public partial class Main : Node3D
         {
             var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
             worldDir = (yawBasis * input.Normalized()).Normalized();
-            _playerCube.Rotation = new Vector3(0f, Mathf.Atan2(-worldDir.X, -worldDir.Z), 0f);
+
+            // Smoothly turn toward the movement direction instead of
+            // snapping. LerpAngle handles the -pi..pi wrap so there's no
+            // flip when crossing 180°.
+            var targetYaw  = Mathf.Atan2(-worldDir.X, -worldDir.Z);
+            var currentYaw = _playerCube.Rotation.Y;
+            var t          = Mathf.Min(1f, TurnSpeed * dt);
+            _playerCube.Rotation = new Vector3(0f, Mathf.LerpAngle(currentYaw, targetYaw, t), 0f);
         }
 
         var vel = _playerCube.Velocity;
