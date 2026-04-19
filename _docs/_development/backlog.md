@@ -158,7 +158,7 @@ depended on that tree is now done by deletion.
 - [ ] Container image + `docker-compose.yml` for quick local runs
 - [ ] Performance baseline / benchmark harness
 - [ ] Load test rig (simulated avatar bot pool)
-- [ ] Fix pre-existing flake `ViewerClientTests.Remote_Movement_Populates_RemoteAvatars` (spun off as side task at the Phase 1→2 boundary)
+- [x] ~~Fix pre-existing flake `ViewerClientTests.Remote_Movement_Populates_RemoteAvatars`~~ Race in the test itself — TCS fired on Bob's initial (X=0) broadcast racing Bob's explicit X=7 update. Fixed by matching the expected position in the subscription. Also removed `continue-on-error: true` from CI test step.
 
 ---
 

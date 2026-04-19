@@ -34,10 +34,18 @@ public class ViewerClientTests
         await bob.ConnectAsync("Bob");
 
         // Bob sends his position. Alice's ViewerClient should see it.
+        //
+        // Match specifically on the expected X value — Bob's initial avatar
+        // (X=0) is also broadcast to Alice asynchronously when Bob connects,
+        // and can arrive between subscribing and Bob's outbound update. If
+        // we completed the TCS on any update for Bob's UserId, the test
+        // would sometimes race against the initial broadcast and assert on
+        // X=0 before the X=7 frame lands.
         var updateReceived = new TaskCompletionSource();
         alice.AvatarUpdated += state =>
         {
-            if (state.UserId == bob.MyUserId) updateReceived.TrySetResult();
+            if (state.UserId == bob.MyUserId && state.Transform.Position.X == 7f)
+                updateReceived.TrySetResult();
         };
 
         await bob.SendAvatarUpdateAsync(new AvatarState(
