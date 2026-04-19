@@ -19,14 +19,9 @@ Eden/**/bin/
 addon-modules/**/bin/
 Prebuild/**/bin/
 
-# ----- Prebuild-generated solution/project files -----
-# These regenerate from prebuild.xml via runprebuild.{bat,sh}
-Eden.sln
-eden.sln
-Eden/**/*.csproj
-addon-modules/**/*.csproj
-# Keep Prebuild tool's own handwritten project
-!Prebuild/**/*.csproj
+# (Legacy) Prebuild-generated files used to be ignored here. Prebuild has
+# been dropped in favour of tracked SDK-style `.csproj` + `.sln` files, so
+# those are now first-class repo contents.
 
 # ----- Build artefacts -----
 *.pdb
