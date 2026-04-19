@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using Eden.Client;
@@ -17,14 +16,15 @@ namespace Eden.Viewer;
 /// <summary>
 /// Root scene built entirely in code — no .tscn scene content needed.
 /// <para>
-/// Mode is picked from command-line args:
+/// Mode is picked from environment variables (so values propagate through
+/// Godot's editor into the running game, which command-line args do not):
 /// <list type="bullet">
-///   <item><c>(none)</c> — solo: in-process server, private world.</item>
-///   <item><c>--host [--port N]</c> — runs a QUIC listener so other viewers
-///   can join; the host itself is an in-process client.</item>
-///   <item><c>--join HOST[:PORT]</c> — connects to an existing host.</item>
+///   <item><c>EDEN_MODE</c> = <c>solo</c> (default) / <c>host</c> / <c>join</c></item>
+///   <item><c>EDEN_PORT</c> = port for host/join (default 5001)</item>
+///   <item><c>EDEN_HOST</c> = target hostname for join (default localhost)</item>
 /// </list>
-/// In Godot, pass args after <c>--</c>: e.g. <c>godot --path Eden.Viewer -- --host</c>.
+/// Set them in the shell *before* launching Godot:
+/// <code>set EDEN_MODE=host &amp; godot --path Eden.Viewer</code>
 /// </para>
 /// </summary>
 public partial class Main : Node3D
@@ -56,8 +56,8 @@ public partial class Main : Node3D
     private void BuildScene()
     {
         var camera = new Camera3D { Position = new Vector3(0f, 4f, 8f) };
-        camera.LookAt(Vector3.Zero, Vector3.Up);
         AddChild(camera);
+        camera.LookAt(Vector3.Zero, Vector3.Up);
 
         var light = new DirectionalLight3D
         {
@@ -106,54 +106,28 @@ public partial class Main : Node3D
 
     private async Task<ITransport> ResolveTransportAsync()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int port = ParsePort(args);
+        var mode = (OS.GetEnvironment("EDEN_MODE") ?? "").ToLowerInvariant();
+        var port = int.TryParse(OS.GetEnvironment("EDEN_PORT"), out var p) ? p : DefaultPort;
+        var host = !string.IsNullOrWhiteSpace(OS.GetEnvironment("EDEN_HOST"))
+                    ? OS.GetEnvironment("EDEN_HOST")
+                    : "localhost";
 
-        if (args.Any(a => a.Equals("--host", System.StringComparison.OrdinalIgnoreCase)))
+        switch (mode)
         {
-            _host = await EdenLauncher.StartHostAsync(port);
-            GD.Print($"[Eden] hosting on port {_host.LocalEndPoint.Port}");
-            return _host.Transport;
+            case "host":
+                _host = await EdenLauncher.StartHostAsync(port);
+                GD.Print($"[Eden] hosting on port {_host.LocalEndPoint.Port}");
+                return _host.Transport;
+
+            case "join":
+                GD.Print($"[Eden] joining {host}:{port}");
+                return await EdenLauncher.ConnectAsync(host, port);
+
+            default:
+                _solo = EdenLauncher.StartSolo();
+                GD.Print("[Eden] solo mode");
+                return _solo.Transport;
         }
-
-        var joinArg = args.FirstOrDefault(a => a.StartsWith("--join", System.StringComparison.OrdinalIgnoreCase));
-        if (joinArg is not null)
-        {
-            var target = ExtractJoinTarget(args, joinArg);
-            var (host, joinPort) = ParseHostPort(target, port);
-            GD.Print($"[Eden] joining {host}:{joinPort}");
-            return await EdenLauncher.ConnectAsync(host, joinPort);
-        }
-
-        _solo = EdenLauncher.StartSolo();
-        GD.Print("[Eden] solo mode");
-        return _solo.Transport;
-    }
-
-    private static int ParsePort(string[] args)
-    {
-        var i = System.Array.FindIndex(args, a => a.Equals("--port", System.StringComparison.OrdinalIgnoreCase));
-        if (i >= 0 && i + 1 < args.Length && int.TryParse(args[i + 1], out var p))
-            return p;
-        return DefaultPort;
-    }
-
-    private static string ExtractJoinTarget(string[] args, string joinArg)
-    {
-        // Support both `--join host:port` and `--join=host:port`.
-        var eq = joinArg.IndexOf('=');
-        if (eq >= 0) return joinArg[(eq + 1)..];
-        var i = System.Array.IndexOf(args, joinArg);
-        if (i >= 0 && i + 1 < args.Length) return args[i + 1];
-        return "localhost";
-    }
-
-    private static (string host, int port) ParseHostPort(string target, int defaultPort)
-    {
-        var colon = target.LastIndexOf(':');
-        if (colon > 0 && int.TryParse(target[(colon + 1)..], out var p))
-            return (target[..colon], p);
-        return (target, defaultPort);
     }
 
     // ---- per-frame ----
