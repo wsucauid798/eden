@@ -5,6 +5,8 @@ using Eden.Launcher.Quic;
 using Eden.Server.Core;
 using Eden.Shared.Ids;
 using Eden.Shared.Transport;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Eden.Launcher;
 
@@ -26,9 +28,10 @@ public static class EdenLauncher
     /// No sockets, no serialisation hop — payloads move across two in-memory
     /// channels. Use this for the &quot;Just me&quot; mode of the launcher.
     /// </summary>
-    public static SoloHandle StartSolo(CancellationToken ct = default)
+    public static SoloHandle StartSolo(ILoggerFactory? loggerFactory = null, CancellationToken ct = default)
     {
-        var server = new EdenServer(EdenId<WorldTag>.New());
+        var factory = loggerFactory ?? NullLoggerFactory.Instance;
+        var server = new EdenServer(EdenId<WorldTag>.New(), factory.CreateLogger<EdenServer>());
         var handle = new SoloHandle(server, ct);
         handle.Connect();
         return handle;
@@ -41,10 +44,13 @@ public static class EdenLauncher
     /// </summary>
     public static async Task<HostHandle> StartHostAsync(
         int port,
+        ILoggerFactory? loggerFactory = null,
         CancellationToken ct = default)
     {
+        var factory = loggerFactory ?? NullLoggerFactory.Instance;
+        var logger  = factory.CreateLogger(typeof(EdenLauncher).FullName!);
         var cert = DevCert.CreateSelfSigned();
-        var server = new EdenServer(EdenId<WorldTag>.New());
+        var server = new EdenServer(EdenId<WorldTag>.New(), factory.CreateLogger<EdenServer>());
         var hostCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         var listenerOptions = new QuicListenerOptions
@@ -65,8 +71,9 @@ public static class EdenLauncher
         };
 
         var listener = await QuicListener.ListenAsync(listenerOptions, ct).ConfigureAwait(false);
+        logger.LogInformation("Host listener bound on {Endpoint}", listener.LocalEndPoint);
 
-        var acceptTask = Task.Run(() => AcceptLoopAsync(listener, server, hostCts.Token), hostCts.Token);
+        var acceptTask = Task.Run(() => AcceptLoopAsync(listener, server, logger, hostCts.Token), hostCts.Token);
 
         // Attach an in-process client so the host itself has a seat in the
         // world (no wasted QUIC loopback). Remote clients use QuicTransport;
@@ -88,8 +95,12 @@ public static class EdenLauncher
     public static async Task<ITransport> ConnectAsync(
         string host,
         int port,
+        ILoggerFactory? loggerFactory = null,
         CancellationToken ct = default)
     {
+        var logger = (loggerFactory ?? NullLoggerFactory.Instance)
+            .CreateLogger(typeof(EdenLauncher).FullName!);
+
         var options = new QuicClientConnectionOptions
         {
             RemoteEndPoint          = new DnsEndPoint(host, port),
@@ -109,6 +120,7 @@ public static class EdenLauncher
         var stream     = await connection
             .OpenOutboundStreamAsync(QuicStreamType.Bidirectional, ct)
             .ConfigureAwait(false);
+        logger.LogInformation("Connected to {Host}:{Port} via QUIC", host, port);
 
         return new QuicTransport(stream, ownedConnection: connection);
     }
@@ -116,6 +128,7 @@ public static class EdenLauncher
     private static async Task AcceptLoopAsync(
         QuicListener listener,
         EdenServer server,
+        ILogger logger,
         CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -126,15 +139,20 @@ public static class EdenLauncher
                 connection = await listener.AcceptConnectionAsync(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { return; }
-            catch (QuicException)               { continue; }
+            catch (QuicException ex)
+            {
+                logger.LogWarning(ex, "Accept failed; continuing");
+                continue;
+            }
 
-            _ = Task.Run(() => HandleConnectionAsync(connection, server, ct), ct);
+            _ = Task.Run(() => HandleConnectionAsync(connection, server, logger, ct), ct);
         }
     }
 
     private static async Task HandleConnectionAsync(
         QuicConnection connection,
         EdenServer server,
+        ILogger logger,
         CancellationToken ct)
     {
         try
@@ -144,7 +162,11 @@ public static class EdenLauncher
             await server.HandleClientAsync(transport, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { /* shutdown */ }
-        catch (QuicException)               { /* peer dropped */ }
+        catch (QuicException ex)
+        {
+            logger.LogInformation("Connection from {Endpoint} aborted: {Error}",
+                connection.RemoteEndPoint, ex.QuicError);
+        }
         finally
         {
             try { await connection.CloseAsync(0, ct).ConfigureAwait(false); } catch { }

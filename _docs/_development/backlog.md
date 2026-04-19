@@ -67,8 +67,8 @@ depended on that tree is now done by deletion.
 - [x] ~~Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server~~ Went direct QUIC via `System.Net.Quic` (`EdenLauncher.StartHostAsync`). No HTTP layer in the runtime.
 - [x] ~~Implement wire protocol transport (server side) — QUIC via `System.Net.Quic`~~ `QuicTransport` + `InMemoryTransport` both implement `ITransport`. Multi-client server (`EdenServer.HandleClientAsync`) with avatar registry + broadcast. `QuicHostIntegrationTests` exercises real QUIC end-to-end.
 - [x] ~~Register custom MessagePack formatters for the `Eden.Shared` domain types~~ `EdenResolver` + per-type array-keyed formatters (`Eden.Shared/Wire/Formatters/`). Measured: AvatarState 96 B (minimal) / 116 B (realistic), PrimState 117 B, Vector3 16 B, Transform 38 B. Records unchanged — no `[Key]` attributes.
-- [ ] Replace config layer with `Microsoft.Extensions.Configuration`
-- [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
+- [ ] Introduce `Microsoft.Extensions.Configuration` — deferred until something in the new tree actually needs configuring (no `appsettings.json` consumers yet; port / world ID / bind address are all method args). Re-evaluate when the Phase 5 launcher menu or Phase 3 services land.
+- [x] ~~Replace logging with `Microsoft.Extensions.Logging`~~ `Microsoft.Extensions.Logging.Abstractions` wired into `EdenServer`, `ViewerClient`, `EdenLauncher`. Callers pass an `ILoggerFactory` or get `NullLogger<T>.Instance` by default. Concrete provider (Serilog, Console, etc.) chosen at the composition root — not a library concern.
 - [ ] Migrate MySQL.Data to MySqlConnector — deferred until a database layer actually lands in the new tree
 - [ ] Replace `System.Drawing.Common` + `libgdiplus` with `SkiaSharp` (or `ImageSharp`) — deferred until image-handling actually lands in the new tree (the legacy callsites went with the Phase 1→2 cut)
 - [ ] Replace `Mono.Data.Sqlite` with `Microsoft.Data.Sqlite` — deferred until SQLite callsites appear in the new tree

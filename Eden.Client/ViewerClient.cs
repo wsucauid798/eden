@@ -5,6 +5,8 @@ using Eden.Shared.Ids;
 using Eden.Shared.Transport;
 using Eden.Shared.Wire;
 using Eden.Shared.Wire.Messages;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Eden.Client;
 
@@ -17,15 +19,17 @@ namespace Eden.Client;
 public sealed class ViewerClient : IAsyncDisposable
 {
     private readonly ITransport _transport;
+    private readonly ILogger<ViewerClient> _logger;
     private readonly ConcurrentDictionary<EdenId<UserTag>, AvatarState> _remoteAvatars = new();
     private readonly CancellationTokenSource _cts = new();
 
     private ServerHello? _session;
     private Task? _receiveLoop;
 
-    public ViewerClient(ITransport transport)
+    public ViewerClient(ITransport transport, ILogger<ViewerClient>? logger = null)
     {
         _transport = transport;
+        _logger    = logger ?? NullLogger<ViewerClient>.Instance;
     }
 
     /// <summary>
@@ -82,7 +86,12 @@ public sealed class ViewerClient : IAsyncDisposable
             {
                 _session = Envelope.DecodePayload<ServerHello>(frame.Value);
                 if (_session.Value.RejectReason is not null)
+                {
+                    _logger.LogError("Server rejected connection: {Reason}", _session.Value.RejectReason);
                     throw new InvalidOperationException($"Server rejected connection: {_session.Value.RejectReason}");
+                }
+                _logger.LogInformation("Connected as user {UserId} to world {WorldId}",
+                    _session.Value.UserId, _session.Value.WorldId);
                 break;
             }
 
@@ -109,6 +118,10 @@ public sealed class ViewerClient : IAsyncDisposable
             }
         }
         catch (OperationCanceledException) { /* expected on dispose */ }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Receive loop ended unexpectedly");
+        }
     }
 
     private void ApplyFrame(MessageKind kind, ReadOnlyMemory<byte> frame)

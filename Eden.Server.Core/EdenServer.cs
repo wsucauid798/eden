@@ -6,6 +6,8 @@ using Eden.Shared.Math;
 using Eden.Shared.Transport;
 using Eden.Shared.Wire;
 using Eden.Shared.Wire.Messages;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Eden.Server.Core;
 
@@ -19,12 +21,14 @@ namespace Eden.Server.Core;
 public sealed class EdenServer
 {
     private readonly EdenId<WorldTag> _worldId;
+    private readonly ILogger<EdenServer> _logger;
     private readonly ConcurrentDictionary<EdenId<SessionTag>, ClientSession> _sessions = new();
     private readonly ConcurrentDictionary<EdenId<UserTag>,    AvatarState>   _avatars  = new();
 
-    public EdenServer(EdenId<WorldTag> worldId)
+    public EdenServer(EdenId<WorldTag> worldId, ILogger<EdenServer>? logger = null)
     {
         _worldId = worldId;
+        _logger  = logger ?? NullLogger<EdenServer>.Instance;
     }
 
     public int SessionCount => _sessions.Count;
@@ -66,9 +70,16 @@ public sealed class EdenServer
                         break;
 
                     default:
-                        break; // unknown / pre-handshake, ignore for now
+                        _logger.LogDebug("Ignoring frame of kind {Kind} on session {SessionId}",
+                            kind, session?.Id);
+                        break;
                 }
             }
+        }
+        catch (OperationCanceledException) { /* shutdown */ }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Client loop ended on session {SessionId}", session?.Id);
         }
         finally
         {
@@ -90,8 +101,16 @@ public sealed class EdenServer
         foreach (var session in _sessions.Values)
         {
             if (skip is { } s && session.Id == s) continue;
-            try { await session.Transport.SendAsync(frame, ct).ConfigureAwait(false); }
-            catch { /* session loop will handle teardown */ }
+            try
+            {
+                await session.Transport.SendAsync(frame, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Broadcast to session {SessionId} failed; session loop will tear down",
+                    session.Id);
+            }
         }
     }
 
@@ -99,6 +118,8 @@ public sealed class EdenServer
     {
         if (hello.WireProtocol != EdenVersion.WireProtocol)
         {
+            _logger.LogWarning("Rejecting client {ClientName} on wire protocol {ClientProto}; server speaks {ServerProto}",
+                hello.ClientName, hello.WireProtocol, EdenVersion.WireProtocol);
             await transport.SendAsync(
                 Envelope.Encode(MessageKind.ServerHello,
                     new ServerHello(default, default, EdenVersion.WireProtocol, default,
@@ -111,6 +132,8 @@ public sealed class EdenServer
         var userId    = EdenId<UserTag>.New();
         var session   = new ClientSession(sessionId, userId, transport);
         _sessions[sessionId] = session;
+        _logger.LogInformation("Session {SessionId} joined as user {UserId} ({ClientName})",
+            sessionId, userId, hello.ClientName);
 
         // Initial avatar state at origin, empty appearance. Clients update
         // once they have a proper position from input.
@@ -159,12 +182,16 @@ public sealed class EdenServer
     {
         _sessions.TryRemove(session.Id, out _);
         _avatars.TryRemove(session.UserId, out _);
+        _logger.LogInformation("Session {SessionId} (user {UserId}) disconnected", session.Id, session.UserId);
 
         try
         {
             await BroadcastAsync(MessageKind.AvatarLeft, new AvatarLeft(session.UserId));
         }
-        catch { /* fire and forget — already tearing down */ }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "AvatarLeft broadcast failed for user {UserId}", session.UserId);
+        }
     }
 }
 

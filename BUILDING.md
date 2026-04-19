@@ -21,10 +21,6 @@ Open `eden.sln` in Visual Studio / Rider / VS Code if you prefer an IDE.
 
 ## Run
 
-The launcher binary lives at `Eden.Launcher/`:
+`Eden.Launcher` is a library exposing `EdenLauncher.StartSolo` / `StartHostAsync` / `ConnectAsync` — it has no `Main`. The entry point is the [Eden.Viewer](Eden.Viewer/README.md), a separate Godot 4 project built from the Godot editor. `Eden.Viewer` is not part of `eden.sln`; open `Eden.Viewer/project.godot` in Godot to build and run it.
 
-```sh
-dotnet run --project Eden.Launcher --configuration Release
-```
-
-The [Eden.Viewer](Eden.Viewer/README.md) is a separate Godot 4 project and is built from the Godot editor — it is not part of `eden.sln`.
+Test harnesses exercise the launcher directly via `EdenLauncher.StartSolo()` etc. — see `Eden.Shared.Tests/`.
