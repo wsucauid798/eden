@@ -92,3 +92,6 @@ bin/config-include/StandaloneCommon.ini
 bin/config-include/GridCommon.ini
 bin/config-include/FlotsamCache.ini
 bin/config-include/osslEnable.ini
+
+# ----- Godot backups on SDK upgrade -----
+**/*.csproj.old
