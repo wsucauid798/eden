@@ -39,13 +39,17 @@ packages/
 *.nupkg
 .nuget/
 
-# ----- Godot (future Eden.Viewer project) -----
+# ----- Godot (Eden.Viewer project) -----
 .godot/
 .import/
 export.cfg
 export_presets.cfg
 *.translation
 mono_crash.*.json
+Eden.Viewer/.godot/
+Eden.Viewer/.mono/
+Eden.Viewer/bin/
+Eden.Viewer/obj/
 
 # ----- Test / coverage output -----
 TestResults/
