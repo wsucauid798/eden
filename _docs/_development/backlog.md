@@ -43,9 +43,9 @@ explicitly decided to be *no replacement*.
 - [ ] LLUDP stack — remove `Eden/Region/ClientStack/Linden/*`
   - Replaced by: new wire protocol over Kestrel (WebSocket or WebTransport).
   - Breaks: client connection lifecycle, packet throttling, presence heartbeats, mesh/asset streaming pipe.
-- [ ] LSL frontend — remove LSL grammar, compiler frontend, `ll*()` function surface
-  - Replaced by: C# scripting via Roslyn (Phase 3).
-  - Breaks: every script event (`touch_start`, `state_entry`, …), every `ll*()` callsite in user content. No migration; new API.
+- [x] ~~LSL frontend — remove LSL grammar, compiler frontend, `ll*()` function surface~~ **Done.** Deleted: `ScriptEngine/YEngine/` (53 files, ~2.9 MB), `ScriptEngine/Shared/Api/Implementation/` (entire tree incl. plugins + AsyncCommandManager), `Shared/Api/Interface/`, `Shared/Api/Runtime/`, `Shared/Tests/`, `Shared/LSL_Types.cs`. Dropped 4 projects from `prebuild.xml`. Surviving `ScriptEngine/Shared/` keeps `Helpers.cs` (DetectParams, EventParams, exception types — generic, used by Scene events) with `LSL_Types.Vector3/Quaternion` substituted by `OpenMetaverse.Vector3/Quaternion`. `ScriptEngine/Interfaces/` (IScriptModule, IScriptEngine, …) kept as scaffolding for Phase 3. String references to "YEngine" in `Scene.cs` config defaults remain — harmless, Phase 3 will replace.
+  - Still open: `bin/OpenSim.ini.example`, `bin/OpenSimDefaults.ini` config sections reference YEngine — rename / gut when we do the `bin/` config cleanup.
+  - Note: the live `Thread.Abort()` in AsyncCommandManager died with this demolition.
 - [ ] Legacy caps handlers — remove inherited caps endpoints (keep the dispatch shape for later)
   - Replaced by: typed RPC endpoints on the new host.
   - Breaks: inventory fetches, mesh upload, asset transfer, seed-cap handshake.
@@ -74,7 +74,7 @@ explicitly decided to be *no replacement*.
   - Breaks: nothing functional — mechanical rewrite.
 - [ ] Build still succeeds with demolition merged
 - [ ] Surviving scene graph still loads and runs a smoke-test region
-- [ ] Bump `<LangVersion>` in `Directory.Build.props` from 12 back to `latest` once YEngine is demolished (YEngine's `field` identifier collides with C# 14's `field` keyword)
+- [x] ~~Bump `<LangVersion>` in `Directory.Build.props` from 12 back to `latest` once YEngine is demolished~~ **Done.** YEngine gone, LangVersion restored to `latest`, build clean.
 - [ ] Decision landed on sandboxing (see Open Decisions)
 - [ ] Decision landed on wire protocol (see Open Decisions)
 

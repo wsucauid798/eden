@@ -1802,110 +1802,10 @@
       <Files>
         <Match pattern="*.cs" recurse="false"/>
         <Match path="../Interfaces" pattern="*.cs" recurse="false"/>
-        <Match path="Api/Interface" pattern="*.cs" recurse="false"/>
       </Files>
     </Project>
 
-    <Project name="OpenSim.Region.ScriptEngine.Shared.Api.Runtime" path="Eden/Region/ScriptEngine/Shared/Api/Runtime" type="Library">
-      <Configuration name="Debug">
-        <Options>
-          <OutputPath>../../../../../../bin/</OutputPath>
-        </Options>
-      </Configuration>
-      <Configuration name="Release">
-        <Options>
-          <OutputPath>../../../../../../bin/</OutputPath>
-        </Options>
-      </Configuration>
 
-      <ReferencePath>../../../../../../bin/</ReferencePath>
-      <Reference name="OpenMetaverseTypes" path="../../../../../../bin/"/>
-      <Reference name="OpenSim"/>
-      <Reference name="OpenSim.Framework"/>
-      <Reference name="OpenSim.Region.Framework"/>
-      <Reference name="OpenSim.Region.CoreModules"/>
-      <Reference name="OpenSim.Framework.Console"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared"/>
-      <Reference name="Nini" path="../../../../../../bin/"/>
-      <Reference name="log4net" path="../../../../../../bin/"/>
-
-      <Files>
-        <Match pattern="*.cs" recurse="false">
-         <Exclude name="obj" pattern="obj"/>
-        </Match>
-      </Files>
-    </Project>
-
-    <Project name="OpenSim.Region.ScriptEngine.Shared.Api" path="Eden/Region/ScriptEngine/Shared/Api/Implementation" type="Library">
-      <Configuration name="Debug">
-        <Options>
-          <OutputPath>../../../../../../bin/</OutputPath>
-        </Options>
-      </Configuration>
-      <Configuration name="Release">
-        <Options>
-          <OutputPath>../../../../../../bin/</OutputPath>
-        </Options>
-      </Configuration>
-
-      <ReferencePath>../../../../../../bin/</ReferencePath>
-      <Reference name="System.Drawing.Common"/>
-      <Reference name="OpenMetaverseTypes" path="../../../../../../bin/"/>
-      <Reference name="OpenMetaverse" path="../../../../../../bin/"/>
-      <Reference name="OpenMetaverse.StructuredData" path="../../../../../../bin/"/>
-      <Reference name="OpenSim"/>
-      <Reference name="OpenSim.Framework"/>
-      <Reference name="OpenSim.Framework.Console"/>
-      <Reference name="OpenSim.Framework.Monitoring"/>
-      <Reference name="OpenSim.Region.Framework"/>
-      <Reference name="OpenSim.Region.CoreModules"/>
-      <Reference name="OpenSim.Region.PhysicsModules.SharedBase"/>
-      <Reference name="OpenSim.Services.Interfaces"/>
-      <Reference name="OpenSim.Services.Connectors"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared.Api.Runtime"/>
-      <Reference name="Nini" path="../../../../../../bin/"/>
-      <Reference name="log4net" path="../../../../../../bin/"/>
-      <Reference name="SmartThreadPool"/>
-
-    </Project>
-
-
-    <!-- YEngine/core XMRengine -->   
-    <Project name="OpenSim.Region.ScriptEngine.YEngine" path="Eden/Region/ScriptEngine/YEngine" type="Library">
-      <Configuration name="Debug">
-        <Options>
-          <OutputPath>../../../../bin/</OutputPath>
-        </Options>
-      </Configuration>
-      <Configuration name="Release">
-        <Options>
-          <OutputPath>../../../../bin/</OutputPath>
-        </Options>
-      </Configuration>
-
-      <ReferencePath>../../../../bin/</ReferencePath>
-      <Reference name="log4net" path="../../../../bin/"/>
-      <Reference name="Mono.Addins" path="../../../../bin/"/>
-      <Reference name="Nini" path="../../../../bin/"/>
-      <Reference name="OpenMetaverse" path="../../../../bin/"/>
-      <Reference name="OpenMetaverse.StructuredData" path="../../../../bin/"/>
-      <Reference name="OpenMetaverseTypes" path="../../../../bin/"/>
-      <Reference name="OpenSim.Framework"/>
-      <Reference name="OpenSim.Framework.Console"/>
-      <Reference name="OpenSim.Framework.Monitoring"/>
-      <Reference name="OpenSim.Region.ClientStack.LindenCaps"/>
-      <Reference name="OpenSim.Region.CoreModules"/>
-      <Reference name="OpenSim.Region.Framework"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared.Api"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared.Api.Runtime"/>
-      <Reference name="OpenSim.Services.Interfaces"/>
-      <Reference name="System.Drawing.Common"/>
-
-</Project>
-   
-    
     <!-- Addons -->
 
     <Project name="OpenSim.Addons.OfflineIM" path="Eden/Addons/OfflineIM" type="Library">
@@ -2609,58 +2509,6 @@
       <Files>
         <Match pattern="*.cs" recurse="false"/>
         <Match buildAction="EmbeddedResource" path="Resources" pattern="*"/>
-      </Files>
-    </Project>
-
-    <Project name="OpenSim.Region.ScriptEngine.Tests" path="Eden/Region/ScriptEngine" type="Library">
-      <Configuration name="Debug">
-        <Options>
-          <OutputPath>../../../bin/</OutputPath>
-        </Options>
-      </Configuration>
-      <Configuration name="Release">
-        <Options>
-          <OutputPath>../../../bin/</OutputPath>
-        </Options>
-      </Configuration>
-
-      <ReferencePath>../../../bin/</ReferencePath>
-      <Reference name="OpenSim.Framework"/>
-      <Reference name="OpenSim.Framework.Servers"/>
-      <Reference name="OpenSim.Framework.Servers.HttpServer"/>
-      <Reference name="OpenSim.Region.CoreModules"/>
-      <Reference name="OpenSim.Region.Framework"/>
-      <Reference name="OpenSim.Region.OptionalModules"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared.Api"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared.Api.Runtime"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared.Instance"/>
-      <Reference name="OpenSim.Region.ScriptEngine.XEngine"/>
-      <Reference name="OpenSim.Services.Interfaces"/>
-      <Reference name="OpenSim.Tests.Common"/>
-      <Reference name="log4net"/>
-      <Reference name="nunit.framework"/>
-      <Reference name="Nini"/>
-      <Reference name="OpenMetaverse"/>
-      <Reference name="OpenMetaverse.StructuredData"/>
-      <Reference name="OpenMetaverseTypes"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared.CodeTools"/>
-      <Reference name="OpenSim.Region.ScriptEngine.Shared"/>
-      <Reference name="Tools"/>
-
-      <Files>
-        <Match path="Shared/Tests" pattern="*.cs" recurse="true">
-         <Exclude name="obj" pattern="obj"/>
-        </Match>
-        <Match path="Shared/CodeTools/Tests" pattern="*.cs" recurse="true">
-         <Exclude name="obj" pattern="obj"/>
-        </Match>
-        <Match path="Shared/Instance/Tests" pattern="*.cs" recurse="true">
-         <Exclude name="obj" pattern="obj"/>
-        </Match>
-        <Match path="XEngine/Tests" pattern="*.cs" recurse="true">
-         <Exclude name="obj" pattern="obj"/>
-        </Match>
       </Files>
     </Project>
 
