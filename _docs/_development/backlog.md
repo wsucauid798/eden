@@ -86,8 +86,8 @@ depended on that tree is now done by deletion.
 ## Phase 3 — Server rebuild
 
 - [ ] Scene graph running against new transport
-- [ ] C# scripting API surface (`async Task OnTouch(Avatar who)`, etc.)
-- [ ] Roslyn-based script host; trust-model sandbox initially
+- [x] ~~C# scripting API surface~~ `Eden.Scripting` — `EdenBehavior` + event/capability attributes + context interfaces. Samples in `Eden.Shared.Tests/ScriptingSamplesCompileTest.cs` are a compile-check.
+- [x] ~~Roslyn-based script host; trust-model sandbox initially~~ `Eden.Scripting.Host.BehaviorHost` — pre-compiled assembly loading (Roslyn-from-source deferred), reflection-based handler dispatch, lifecycle, error isolation. 10 host tests + DoorScript end-to-end integration. Trust model only; sandboxing deferred to Phase 6.
 - [ ] Physics re-integration against Bullet
 - [ ] Asset / inventory / user services exposed over new wire protocol
 - [x] ~~Integration tests that spin up a server and hit endpoints~~ `Eden.Shared.Tests` covers handshake, multi-client avatar registry, broadcast + spoof-guard, QUIC end-to-end, ViewerClient mirror. 28 tests (1 pre-existing flake tracked separately).

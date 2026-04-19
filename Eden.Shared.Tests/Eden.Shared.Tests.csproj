@@ -25,6 +25,7 @@
     <ProjectReference Include="..\Eden.Server.Core\Eden.Server.Core.csproj" />
     <ProjectReference Include="..\Eden.Client\Eden.Client.csproj" />
     <ProjectReference Include="..\Eden.Scripting\Eden.Scripting.csproj" />
+    <ProjectReference Include="..\Eden.Scripting.Host\Eden.Scripting.Host.csproj" />
     <ProjectReference Include="..\Eden.Logging\Eden.Logging.csproj" />
   </ItemGroup>
 

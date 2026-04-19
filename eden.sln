@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Logging", "Eden.Loggin
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting", "Eden.Scripting\Eden.Scripting.csproj", "{3A784143-1611-40C4-8555-2ED236DE8AB6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting.Host", "Eden.Scripting.Host\Eden.Scripting.Host.csproj", "{ACC107DE-B08D-4E25-917B-EEA57D2246EC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -109,6 +111,18 @@ Global
 		{3A784143-1611-40C4-8555-2ED236DE8AB6}.Release|x64.Build.0 = Release|Any CPU
 		{3A784143-1611-40C4-8555-2ED236DE8AB6}.Release|x86.ActiveCfg = Release|Any CPU
 		{3A784143-1611-40C4-8555-2ED236DE8AB6}.Release|x86.Build.0 = Release|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Debug|x64.Build.0 = Debug|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Debug|x86.Build.0 = Debug|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|x64.ActiveCfg = Release|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|x64.Build.0 = Release|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|x86.ActiveCfg = Release|Any CPU
+		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
