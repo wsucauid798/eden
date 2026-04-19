@@ -1,18 +1,15 @@
 # Eden
 
-Eden is a one-click, cross-platform application for creating and
-visiting virtual worlds. Behaviour inside a world is scripted in C#.
-Runs on Windows, Linux, and macOS.
+Eden is a platform for creating single or multiresident virtual worlds.
 
 Pre-alpha.
 
 ## Install
 
-**Prebuilt binary:** grab the latest build for your platform from
-[GitHub Actions](https://github.com/wsucauid798/eden/actions), extract
-the zip, run the executable.
-
-**From source:** see [BUILDING](_docs/_development/BUILDING.md).
+Build from source — see [BUILDING](_docs/_development/BUILDING.md).
+Prebuilt releases will land on the
+[Releases page](https://github.com/wsucauid798/eden/releases) once there's
+something worth tagging.
 
 ## Run
 
