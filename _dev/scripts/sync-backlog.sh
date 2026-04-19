@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 #
-# Parse markdown backlog files and sync their unchecked items into GitHub as
-# issues *and* add them to a Projects v2 board. Idempotent on both sides:
-#   - issues whose title already exists in the repo are not re-created
-#   - issues whose URL is already in the project are not re-added
-# Orphan issues (exist in repo but not in project) are swept into the project.
+# Parse markdown backlog files and sync them with GitHub Issues + a
+# Projects v2 board, using the issue **number** as the canonical link
+# (not the title text).
+#
+# On first encounter of a line, creates an issue and rewrites the line
+# to embed `#NNN` after the checkbox:
+#     - [ ] text                 →  - [ ] #42 text
+# Subsequent runs use the `#NNN` to decide what to do:
+#     - [ ] #42 text             →  ensure issue is open + in project
+#     - [x] #42 text             →  close issue #42 (idempotent)
+#
+# Legacy lines without `#NNN` fall back to title-prefix matching so
+# migration happens automatically.
 #
 # Usage:
 #   PROJECT_NUMBER=<n> ./sync-backlog.sh <file.md> [<file.md> ...]
@@ -34,8 +42,9 @@ DRY_RUN="${DRY_RUN:-0}"
 
 issues_created=0
 project_added=0
-skipped=0
+linked=0
 closed=0
+skipped=0
 failures=0
 
 # ---------- helpers ----------
@@ -80,17 +89,23 @@ existing_project_json="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER"
 existing_project_urls="$(jq -r '.items[]?.content.url // empty' \
                          <<<"$existing_project_json" | sort -u)"
 
-find_issue_url() {
-  local title="$1"
-  jq -r --arg t "$title" \
-     'map(select(.title == $t) | .url) | .[0] // empty' \
+issue_url_by_number() {
+  local number="$1"
+  jq -r --argjson n "$number" \
+     'map(select(.number == $n) | .url) | .[0] // empty' \
      <<<"$existing_issues_json"
 }
 
-# For close-on-tick, match exactly first; if not found, fall back to a
-# prefix match. The backlog may use ~~short title~~ where the full issue
-# title has trailing detail (e.g. "(domain types: Vector3, ...)").
-find_issue_number() {
+issue_state_by_number() {
+  local number="$1"
+  jq -r --argjson n "$number" \
+     'map(select(.number == $n) | .state) | .[0] // empty' \
+     <<<"$existing_issues_json"
+}
+
+# Legacy migration path: find an issue by title prefix when the backlog
+# line doesn't yet have a #NNN.
+find_issue_number_by_title() {
   local title="$1"
   local n
   n=$(jq -r --arg t "$title" \
@@ -104,20 +119,6 @@ find_issue_number() {
   echo "$n"
 }
 
-find_issue_state() {
-  local title="$1"
-  local s
-  s=$(jq -r --arg t "$title" \
-       'map(select(.title == $t) | .state) | .[0] // empty' \
-       <<<"$existing_issues_json")
-  if [[ -z "$s" ]]; then
-    s=$(jq -r --arg t "$title" \
-         'map(select(.title | startswith($t)) | .state) | .[0] // empty' \
-         <<<"$existing_issues_json")
-  fi
-  echo "$s"
-}
-
 url_in_project() {
   local url="$1"
   [[ -z "$url" ]] && return 1
@@ -125,9 +126,9 @@ url_in_project() {
 }
 
 remember_issue() {
-  local title="$1" url="$2"
-  existing_issues_json="$(jq --arg t "$title" --arg u "$url" \
-                           '. + [{title: $t, url: $u}]' \
+  local number="$1" title="$2" url="$3" state="$4"
+  existing_issues_json="$(jq --argjson n "$number" --arg t "$title" --arg u "$url" --arg s "$state" \
+                           '. + [{number: $n, title: $t, url: $u, state: $s}]' \
                            <<<"$existing_issues_json")"
 }
 
@@ -136,59 +137,74 @@ remember_project_url() {
   existing_project_urls="$(printf '%s\n%s\n' "$existing_project_urls" "$url" | sort -u)"
 }
 
-# ---------- per-item work ----------
+# ---------- actions ----------
 
-sync_item() {
+create_issue() {
   local title="$1" phase="$2" file="$3"
-  local label url body
+  local label body
   label="$(slugify "$phase")"
   body="From [\`$file\`]($file) — **$phase**"
 
-  url="$(find_issue_url "$title")"
-
-  # 1. Create the issue if it doesn't exist yet.
-  if [[ -z "$url" ]]; then
-    if [[ "$DRY_RUN" == "1" ]]; then
-      echo "[dry-run] would create issue: $title"
-      url="dry-run://$title"
-    else
-      ensure_label "$label"
-      if ! url=$(retry gh issue create --repo "$REPO" --title "$title" \
-                        ${label:+--label "$label"} --body "$body"); then
-        echo "FAIL create issue: $title" >&2
-        return 1
-      fi
-      echo "issue: $title -> $url"
-      remember_issue "$title" "$url"
-      issues_created=$((issues_created + 1))
-    fi
-  fi
-
-  # 2. Add to project if it's not already there.
-  if url_in_project "$url"; then
-    skipped=$((skipped + 1))
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "[dry-run] would create: $title"
+    echo "999999"  # fake number, caller handles dry-run
     return 0
   fi
 
+  ensure_label "$label"
+
+  local url
+  if ! url=$(retry gh issue create --repo "$REPO" --title "$title" \
+                    ${label:+--label "$label"} --body "$body"); then
+    return 1
+  fi
+
+  # Parse number out of the URL (https://github.com/owner/repo/issues/NNN).
+  local number="${url##*/}"
+  remember_issue "$number" "$title" "$url" "OPEN"
+  echo "$number"
+  return 0
+}
+
+add_to_project() {
+  local number="$1" title="$2"
+  local url; url="$(issue_url_by_number "$number")"
+  [[ -z "$url" ]] && return 1
+  if url_in_project "$url"; then return 0; fi
+
   if [[ "$DRY_RUN" == "1" ]]; then
-    echo "[dry-run] would add to project: $title ($url)"
+    echo "[dry-run] would add to project: #$number $title"
     return 0
   fi
 
   if ! retry gh project item-add "$PROJECT_NUMBER" \
                --owner "$OWNER" --url "$url" >/dev/null; then
-    echo "FAIL project-add: $title ($url)" >&2
     return 1
   fi
-
-  echo "project: $title"
   remember_project_url "$url"
-  project_added=$((project_added + 1))
   return 0
 }
 
-# ---------- main loop ----------
+close_issue() {
+  local number="$1" title="$2"
+  local state; state="$(issue_state_by_number "$number")"
+  [[ "$state" != "OPEN" ]] && return 0  # already closed or unknown
 
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "[dry-run] would close #$number: $title"
+    return 0
+  fi
+
+  if ! retry gh issue close "$number" --repo "$REPO" --reason completed >/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
+# ---------- per-file processing ----------
+
+# Rewrites the file in-place, inserting `#NNN ` after the checkbox for any
+# newly-created issues. Writes back only if any lines changed.
 process_file() {
   local file="$1"
   if [[ ! -f "$file" ]]; then
@@ -197,45 +213,124 @@ process_file() {
   fi
 
   echo "=== $file ==="
-  local current_phase=""
 
-  while IFS= read -r line || [[ -n "$line" ]]; do
+  local -a lines
+  mapfile -t lines < "$file"
+
+  local current_phase=""
+  local file_changed=0
+
+  local i
+  for (( i = 0; i < ${#lines[@]}; i++ )); do
+    local line="${lines[$i]}"
+
+    # Track section headers (phase labels).
     if [[ "$line" =~ ^##[[:space:]]+(.*)$ ]]; then
       current_phase="${BASH_REMATCH[1]}"
       continue
     fi
 
-    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[[[:space:]]\][[:space:]]+(.+)$ ]]; then
-      local title="${BASH_REMATCH[1]}"
-      title="${title#\#[0-9]* }"
-      title="${title%"${title##*[![:space:]]}"}"
-
-      if ! sync_item "$title" "$current_phase" "$file"; then
-        failures=$((failures + 1))
-      fi
-    elif [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[x\][[:space:]]+(.+)$ ]]; then
-      # Checked item — close the matching GitHub issue if still open.
-      local raw="${BASH_REMATCH[1]}"
-      # Strip ~~...~~ struck-through text wrapping if present, keep core title.
-      local title="${raw#~~}"; title="${title%%~~*}"
-      title="${title#\#[0-9]* }"
-      title="${title%"${title##*[![:space:]]}"}"
-
-      local number; number="$(find_issue_number "$title")"
-      local state;  state="$(find_issue_state  "$title")"
-      if [[ -n "$number" && "$state" == "OPEN" ]]; then
-        if [[ "$DRY_RUN" == "1" ]]; then
-          echo "[dry-run] would close #$number: $title"
-        elif retry gh issue close "$number" --repo "$REPO" --reason completed >/dev/null; then
-          echo "closed #$number: $title"
-          closed=$((closed + 1))
-        else
-          echo "FAIL close #$number: $title" >&2
-          failures=$((failures + 1))
-        fi
-      fi
+    # Unchecked line: - [ ] [#NNN] title
+    if [[ "$line" =~ ^([[:space:]]*-[[:space:]]\[)[[:space:]](\][[:space:]]+)(.+)$ ]]; then
+      local prefix="${BASH_REMATCH[1]}"
+      local closer="${BASH_REMATCH[2]}"
+      local body="${BASH_REMATCH[3]}"
+      process_open_line "$i" "$prefix" "$closer" "$body" "$current_phase" "$file"
+      continue
     fi
-  done < "$file"
+
+    # Checked line: - [x] [#NNN] title
+    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[x\][[:space:]]+(.+)$ ]]; then
+      local body="${BASH_REMATCH[1]}"
+      process_closed_line "$body"
+      continue
+    fi
+  done
+
+  if (( file_changed )); then
+    printf '%s\n' "${lines[@]}" > "$file"
+    echo "updated: $file (embedded issue numbers)"
+  fi
+}
+
+# Process an unchecked `- [ ]` line. Arguments:
+#   $1 index  $2 "- [ ["  $3 "] "  $4 body (may start with #NNN)  $5 phase  $6 file
+# Sets file_changed=1 and rewrites lines[$i] if we created an issue.
+process_open_line() {
+  local idx="$1" prefix="$2" closer="$3" body="$4" phase="$5" file="$6"
+
+  local number="" title="$body"
+  if [[ "$body" =~ ^#([0-9]+)[[:space:]]+(.*)$ ]]; then
+    number="${BASH_REMATCH[1]}"
+    title="${BASH_REMATCH[2]}"
+  fi
+
+  if [[ -z "$number" ]]; then
+    # No number yet — try title match first (migration), else create.
+    number="$(find_issue_number_by_title "$title")"
+    if [[ -z "$number" ]]; then
+      if ! number=$(create_issue "$title" "$phase" "$file"); then
+        echo "FAIL create: $title" >&2
+        failures=$((failures + 1))
+        return
+      fi
+      issues_created=$((issues_created + 1))
+      echo "issue #$number: $title"
+    else
+      echo "link #$number: $title"
+      linked=$((linked + 1))
+    fi
+    # Rewrite the line with #NNN embedded.
+    lines[$idx]="${prefix} ${closer}#${number} ${title}"
+    file_changed=1
+  fi
+
+  # Make sure issue is in the project.
+  if add_to_project "$number" "$title"; then
+    local url; url="$(issue_url_by_number "$number")"
+    if [[ -n "$url" ]] && ! url_in_project "$url"; then
+      echo "project: #$number $title"
+      project_added=$((project_added + 1))
+    fi
+  else
+    echo "FAIL project-add: #$number $title" >&2
+    failures=$((failures + 1))
+  fi
+}
+
+# Process a checked `- [x]` line. Closes the linked issue if open.
+process_closed_line() {
+  local body="$1"
+  local number=""
+  if [[ "$body" =~ ^#([0-9]+)[[:space:]]+(.*)$ ]]; then
+    number="${BASH_REMATCH[1]}"
+  fi
+
+  if [[ -z "$number" ]]; then
+    # Legacy: try title-prefix match. Strip ~~...~~ wrapping if present.
+    local title="${body#~~}"; title="${title%%~~*}"
+    title="${title%"${title##*[![:space:]]}"}"
+    number="$(find_issue_number_by_title "$title")"
+    if [[ -z "$number" ]]; then
+      skipped=$((skipped + 1))
+      return
+    fi
+  fi
+
+  if close_issue "$number" "$body"; then
+    # Only count if actually transitioned from OPEN; close_issue is silent
+    # when already closed. We re-check state to avoid double-counting.
+    local state; state="$(issue_state_by_number "$number")"
+    if [[ "$state" == "OPEN" ]]; then
+      echo "closed #$number"
+      closed=$((closed + 1))
+    else
+      skipped=$((skipped + 1))
+    fi
+  else
+    echo "FAIL close #$number" >&2
+    failures=$((failures + 1))
+  fi
 }
 
 for f in "$@"; do
@@ -243,6 +338,6 @@ for f in "$@"; do
 done
 
 echo
-echo "summary: issues_created=$issues_created project_added=$project_added closed=$closed skipped=$skipped failures=$failures"
+echo "summary: issues_created=$issues_created linked=$linked project_added=$project_added closed=$closed skipped=$skipped failures=$failures"
 
 [[ "$failures" -eq 0 ]]
