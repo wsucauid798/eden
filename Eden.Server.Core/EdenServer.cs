@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using Eden.Shared;
+using Eden.Shared.Entities;
 using Eden.Shared.Ids;
+using Eden.Shared.Math;
 using Eden.Shared.Transport;
 using Eden.Shared.Wire;
 using Eden.Shared.Wire.Messages;
@@ -8,33 +10,35 @@ using Eden.Shared.Wire.Messages;
 namespace Eden.Server.Core;
 
 /// <summary>
-/// The transport-agnostic Eden server. One instance owns the authoritative
-/// world and handles an arbitrary number of connected clients. Each client's
-/// transport is driven by its own message loop via
-/// <see cref="HandleClientAsync"/>; the server fan-outs to all connected
-/// clients via <see cref="BroadcastAsync"/>.
+/// The transport-agnostic Eden server. Owns the authoritative world state
+/// and handles an arbitrary number of connected clients. Each client's
+/// transport is driven by its own loop via <see cref="HandleClientAsync"/>;
+/// the server fans out to every session via <see cref="BroadcastAsync"/>
+/// and <see cref="BroadcastExceptAsync"/>.
 /// </summary>
 public sealed class EdenServer
 {
     private readonly EdenId<WorldTag> _worldId;
     private readonly ConcurrentDictionary<EdenId<SessionTag>, ClientSession> _sessions = new();
+    private readonly ConcurrentDictionary<EdenId<UserTag>,    AvatarState>   _avatars  = new();
 
     public EdenServer(EdenId<WorldTag> worldId)
     {
         _worldId = worldId;
     }
 
-    /// <summary>Currently connected sessions.</summary>
     public int SessionCount => _sessions.Count;
+    public int AvatarCount  => _avatars.Count;
 
     /// <summary>
     /// Run a message loop against one client's transport until it closes or
-    /// <paramref name="ct"/> fires. Register the session on <c>ClientHello</c>
-    /// and unregister on exit.
+    /// <paramref name="ct"/> fires. Registers the session on
+    /// <c>ClientHello</c>, propagates state changes, and unregisters on exit
+    /// (broadcasting <see cref="AvatarLeft"/>).
     /// </summary>
     public async Task HandleClientAsync(ITransport transport, CancellationToken ct = default)
     {
-        EdenId<SessionTag>? sessionId = null;
+        ClientSession? session = null;
         try
         {
             while (!ct.IsCancellationRequested)
@@ -46,7 +50,7 @@ public sealed class EdenServer
                 switch (kind)
                 {
                     case MessageKind.ClientHello:
-                        sessionId = await OnClientHello(transport, Envelope.DecodePayload<ClientHello>(frame.Value), ct);
+                        session = await OnClientHello(transport, Envelope.DecodePayload<ClientHello>(frame.Value), ct);
                         break;
 
                     case MessageKind.Ping:
@@ -56,56 +60,115 @@ public sealed class EdenServer
                             ct).ConfigureAwait(false);
                         break;
 
-                    // Other kinds are dropped silently for now; protocol-strictness
-                    // pass lands when the full message surface is in place.
-                    default:
+                    case MessageKind.AvatarUpdate when session is not null:
+                        var update = Envelope.DecodePayload<AvatarUpdate>(frame.Value);
+                        await OnAvatarUpdate(session, update, ct);
                         break;
+
+                    default:
+                        break; // unknown / pre-handshake, ignore for now
                 }
             }
         }
         finally
         {
-            if (sessionId is { } id)
-                _sessions.TryRemove(id, out _);
+            if (session is not null)
+                await DisconnectSession(session);
         }
     }
 
-    /// <summary>Send a frame to every currently connected client.</summary>
-    public async Task BroadcastAsync<T>(MessageKind kind, T payload, CancellationToken ct = default)
+    /// <summary>Send to every currently connected client.</summary>
+    public Task BroadcastAsync<T>(MessageKind kind, T payload, CancellationToken ct = default)
+        => FanOut(Envelope.Encode(kind, payload), skip: null, ct);
+
+    /// <summary>Send to every connected client except the given session.</summary>
+    public Task BroadcastExceptAsync<T>(EdenId<SessionTag> skip, MessageKind kind, T payload, CancellationToken ct = default)
+        => FanOut(Envelope.Encode(kind, payload), skip, ct);
+
+    private async Task FanOut(byte[] frame, EdenId<SessionTag>? skip, CancellationToken ct)
     {
-        var frame = Envelope.Encode(kind, payload);
-        // ConcurrentDictionary.Values is a snapshot — safe to iterate while
-        // the set mutates. A session whose transport has dropped will throw;
-        // we swallow and let its own loop handle teardown.
         foreach (var session in _sessions.Values)
         {
+            if (skip is { } s && session.Id == s) continue;
             try { await session.Transport.SendAsync(frame, ct).ConfigureAwait(false); }
-            catch { /* drop — session loop will clean up */ }
+            catch { /* session loop will handle teardown */ }
         }
     }
 
-    private async Task<EdenId<SessionTag>?> OnClientHello(ITransport transport, ClientHello hello, CancellationToken ct)
+    private async Task<ClientSession?> OnClientHello(ITransport transport, ClientHello hello, CancellationToken ct)
     {
         if (hello.WireProtocol != EdenVersion.WireProtocol)
         {
             await transport.SendAsync(
                 Envelope.Encode(MessageKind.ServerHello,
-                    new ServerHello(default, EdenVersion.WireProtocol, default,
+                    new ServerHello(default, default, EdenVersion.WireProtocol, default,
                         $"Unsupported wire protocol {hello.WireProtocol}; server speaks {EdenVersion.WireProtocol}")),
                 ct).ConfigureAwait(false);
             return null;
         }
 
         var sessionId = EdenId<SessionTag>.New();
-        _sessions[sessionId] = new ClientSession(sessionId, transport);
+        var userId    = EdenId<UserTag>.New();
+        var session   = new ClientSession(sessionId, userId, transport);
+        _sessions[sessionId] = session;
 
+        // Initial avatar state at origin, empty appearance. Clients update
+        // once they have a proper position from input.
+        var initialAvatar = new AvatarState(
+            UserId:         userId,
+            SessionId:      sessionId,
+            DisplayName:    hello.ClientName,
+            Transform:      Transform.Identity,
+            Velocity:       Vector3.Zero,
+            AppearanceHash: 0);
+        _avatars[userId] = initialAvatar;
+
+        // 1) ServerHello reply.
         await transport.SendAsync(
             Envelope.Encode(MessageKind.ServerHello,
-                new ServerHello(sessionId, EdenVersion.WireProtocol, _worldId, RejectReason: null)),
+                new ServerHello(sessionId, userId, EdenVersion.WireProtocol, _worldId, RejectReason: null)),
             ct).ConfigureAwait(false);
 
-        return sessionId;
+        // 2) Sync existing world to the newcomer (one AvatarUpdate per
+        //    avatar already present — *excluding* their own).
+        foreach (var existing in _avatars.Values)
+        {
+            if (existing.UserId == userId) continue;
+            await transport.SendAsync(
+                Envelope.Encode(MessageKind.AvatarUpdate, new AvatarUpdate(existing)),
+                ct).ConfigureAwait(false);
+        }
+
+        // 3) Announce the newcomer to everyone else.
+        await BroadcastExceptAsync(sessionId, MessageKind.AvatarUpdate, new AvatarUpdate(initialAvatar), ct);
+
+        return session;
+    }
+
+    private async Task OnAvatarUpdate(ClientSession session, AvatarUpdate update, CancellationToken ct)
+    {
+        // Trust the client's own state record only for its own avatar; ignore
+        // attempts to spoof someone else. Normalise to the session's UserId.
+        var state = update.State with { UserId = session.UserId, SessionId = session.Id };
+        _avatars[session.UserId] = state;
+
+        await BroadcastExceptAsync(session.Id, MessageKind.AvatarUpdate, new AvatarUpdate(state), ct);
+    }
+
+    private async Task DisconnectSession(ClientSession session)
+    {
+        _sessions.TryRemove(session.Id, out _);
+        _avatars.TryRemove(session.UserId, out _);
+
+        try
+        {
+            await BroadcastAsync(MessageKind.AvatarLeft, new AvatarLeft(session.UserId));
+        }
+        catch { /* fire and forget — already tearing down */ }
     }
 }
 
-internal sealed record class ClientSession(EdenId<SessionTag> Id, ITransport Transport);
+internal sealed record class ClientSession(
+    EdenId<SessionTag> Id,
+    EdenId<UserTag>    UserId,
+    ITransport         Transport);

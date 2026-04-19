@@ -14,10 +14,14 @@ public readonly record struct ClientHello(
 
 /// <summary>
 /// Server's reply to <see cref="ClientHello"/>. Either accepts (non-empty
-/// <see cref="SessionId"/>) or rejects (sets <see cref="RejectReason"/>).
+/// <see cref="SessionId"/> and <see cref="UserId"/>) or rejects (sets
+/// <see cref="RejectReason"/>). The <see cref="UserId"/> is the avatar this
+/// client will drive; the client uses it to filter echoes of its own
+/// state broadcasts.
 /// </summary>
 public readonly record struct ServerHello(
     EdenId<SessionTag> SessionId,
+    EdenId<UserTag>    UserId,
     string             WireProtocol,
     EdenId<WorldTag>   WorldId,
     string?            RejectReason);

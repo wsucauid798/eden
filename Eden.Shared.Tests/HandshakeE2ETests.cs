@@ -20,6 +20,7 @@ public class HandshakeE2ETests
         // --- Server task: wait for a ClientHello, reply with ServerHello.
         var worldId    = EdenId<WorldTag>.New();
         var sessionId  = EdenId<SessionTag>.New();
+        var userId     = EdenId<UserTag>.New();
 
         var serverTask = Task.Run(async () =>
         {
@@ -30,7 +31,7 @@ public class HandshakeE2ETests
             var hello = Envelope.DecodePayload<ClientHello>(frame.Value);
             Assert.Equal("0.1", hello.WireProtocol);
 
-            var reply = new ServerHello(sessionId, "0.1", worldId, RejectReason: null);
+            var reply = new ServerHello(sessionId, userId, "0.1", worldId, RejectReason: null);
             await serverSide.SendAsync(Envelope.Encode(MessageKind.ServerHello, reply));
         });
 
@@ -44,6 +45,7 @@ public class HandshakeE2ETests
 
         var serverHello = Envelope.DecodePayload<ServerHello>(response.Value);
         Assert.Equal(sessionId, serverHello.SessionId);
+        Assert.Equal(userId,    serverHello.UserId);
         Assert.Equal(worldId,   serverHello.WorldId);
         Assert.Null(serverHello.RejectReason);
 

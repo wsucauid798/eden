@@ -15,6 +15,12 @@ public readonly record struct AvatarUpdate(AvatarState State);
 public readonly record struct PrimUpdate(PrimState State);
 
 /// <summary>
+/// Server → viewer: an avatar left the world (disconnected). Triggers the
+/// viewer to remove the avatar from its scene.
+/// </summary>
+public readonly record struct AvatarLeft(EdenId<UserTag> UserId);
+
+/// <summary>
 /// Bi-directional chat message. Channel 0 = public regional; positive channels
 /// are listener-addressed; negative channels are reserved for system use.
 /// </summary>

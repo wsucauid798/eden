@@ -16,6 +16,7 @@ public enum MessageKind : byte
     // --- World state ---
     AvatarUpdate = 10,
     PrimUpdate   = 11,
+    AvatarLeft   = 12,
 
     // --- Chat ---
     ChatMessage  = 20,

@@ -26,6 +26,7 @@ public class EnvelopeTests
     {
         var sh = new ServerHello(
             SessionId:    EdenId<SessionTag>.New(),
+            UserId:       EdenId<UserTag>.New(),
             WireProtocol: "0.1",
             WorldId:      EdenId<WorldTag>.New(),
             RejectReason: null);
