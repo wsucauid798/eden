@@ -12,18 +12,9 @@
 _docs/_design/
 
 # ----- .NET build output -----
-# Note: root /bin is intentionally NOT ignored — it holds vendored
-# third-party DLLs alongside build output. Revisit once modernised.
 **/obj/
 **/bin/Debug/
 **/bin/Release/
-Eden/**/bin/
-addon-modules/**/bin/
-Prebuild/**/bin/
-
-# (Legacy) Prebuild-generated files used to be ignored here. Prebuild has
-# been dropped in favour of tracked SDK-style `.csproj` + `.sln` files, so
-# those are now first-class repo contents.
 
 # ----- Build artefacts -----
 *.pdb
@@ -71,27 +62,6 @@ $RECYCLE.BIN/
 secrets/
 *.key
 *.pem
-
-# ----- Runtime / user data -----
-# OpenSim drops these into bin/ at runtime — harmless but noisy
-bin/Regions/
-bin/ScriptEngines/
-bin/addon-modules/
-bin/maptiles/
-bin/*.db
-bin/*.log
-bin/OpenSim.log.*
-
-# ----- User-copied runtime configs (created from *.example at runtime) -----
-bin/OpenSim.ini
-bin/Regions.ini
-bin/Robust.ini
-bin/Robust.HG.ini
-bin/OpenSimConsoleHistory.txt
-bin/config-include/StandaloneCommon.ini
-bin/config-include/GridCommon.ini
-bin/config-include/FlotsamCache.ini
-bin/config-include/osslEnable.ini
 
 # ----- Godot backups on SDK upgrade -----
 **/*.csproj.old
