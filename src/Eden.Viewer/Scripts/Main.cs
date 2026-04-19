@@ -29,8 +29,8 @@ namespace Eden.Viewer;
 /// </summary>
 public partial class Main : Node3D
 {
-    private const float  MoveSpeed        = 5f;
-    private const float  SprintMultiplier = 1.8f;
+    private const float  MoveSpeed        = 4f;
+    private const float  SprintMultiplier = 2.5f;
     private const float  JumpVelocity     = 6f;
     private const float  Gravity          = 18f;
     private const float  FlySpeed         = 6f;
@@ -339,11 +339,7 @@ public partial class Main : Node3D
         // position math. Visible cube and box collider are both children;
         // MoveAndSlide is driven from _PhysicsProcess.
         _playerCube = new CharacterBody3D { Position = new Vector3(0f, GroundY, 0f) };
-        _playerMesh = new MeshInstance3D  { Mesh = new BoxMesh { Size = Vector3.One } };
-        _playerMesh.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
-        {
-            AlbedoColor = new Color(0.55f, 0.55f, 0.60f),
-        });
+        _playerMesh = BuildAvatarMesh(new Color(0.55f, 0.55f, 0.60f));
         _playerCube.AddChild(_playerMesh);
         _playerCube.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
         AddChild(_playerCube);
@@ -462,6 +458,27 @@ public partial class Main : Node3D
         var body = new StaticBody3D();
         body.AddChild(new CollisionShape3D { Shape = shape });
         parent.AddChild(body);
+    }
+
+    /// <summary>Body mesh + a small white "nose" on the front face so
+    /// which way the avatar is pointing is visible at a glance (a plain
+    /// cube looks identical from four sides).</summary>
+    private static MeshInstance3D BuildAvatarMesh(Color bodyColor)
+    {
+        var mesh = new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One } };
+        mesh.SetSurfaceOverrideMaterial(0, new StandardMaterial3D { AlbedoColor = bodyColor });
+
+        var nose = new MeshInstance3D
+        {
+            Mesh     = new BoxMesh { Size = new Vector3(0.3f, 0.3f, 0.3f) },
+            Position = new Vector3(0f, 0.2f, -0.6f),   // local -Z is forward
+        };
+        nose.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+        {
+            AlbedoColor = new Color(1f, 1f, 1f),
+        });
+        mesh.AddChild(nose);
+        return mesh;
     }
 
     /// <summary>Deterministic colour from a <see cref="EdenId{UserTag}"/>.
@@ -593,13 +610,15 @@ public partial class Main : Node3D
         if (_client?.Session is null || _playerCube is null) return;
 
         var pos = _playerCube.Position;
+        var q   = _playerCube.Quaternion;
         var edenPos = new Eden.Shared.Math.Vector3(pos.X, pos.Y, pos.Z);
+        var edenRot = new Eden.Shared.Math.Quaternion(q.X, q.Y, q.Z, q.W);
 
         await _client.SendAvatarUpdateAsync(new AvatarState(
             UserId:         _client.MyUserId,
             SessionId:      _client.Session.Value.SessionId,
             DisplayName:    _displayName,
-            Transform:      new Eden.Shared.Math.Transform(edenPos, Eden.Shared.Math.Quaternion.Identity),
+            Transform:      new Eden.Shared.Math.Transform(edenPos, edenRot),
             Velocity:       Eden.Shared.Math.Vector3.Zero,
             AppearanceHash: 0));
     }
@@ -608,8 +627,9 @@ public partial class Main : Node3D
     {
         if (_hudLabel is null || _playerCube is null) return;
         var pos = _playerCube.Position;
-        _hudLabel.Text = $"Eden · {ModeLabel()} · {_displayName} · " +
-                         $"({pos.X:F1}, {pos.Z:F1}) · {_remote.Count} other(s)";
+        var motion = _isFlying ? "fly" : _isSprinting ? "sprint" : "walk";
+        _hudLabel.Text = $"Eden · {ModeLabel()} · {_displayName} · {motion} · " +
+                         $"({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}) · {_remote.Count} other(s)";
     }
 
     private string ModeLabel() =>
@@ -625,11 +645,7 @@ public partial class Main : Node3D
     {
         if (!_remote.TryGetValue(state.UserId, out var avatar))
         {
-            var cube = new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One } };
-            cube.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
-            {
-                AlbedoColor = ColorForUser(state.UserId),
-            });
+            var cube = BuildAvatarMesh(ColorForUser(state.UserId));
             AddChild(cube);
 
             var label = BuildNameLabel(state.DisplayName);
@@ -640,7 +656,9 @@ public partial class Main : Node3D
         }
 
         var p = state.Transform.Position;
-        avatar.Cube.Position = new Vector3(p.X, p.Y + 0.5f, p.Z);
+        var r = state.Transform.Rotation;
+        avatar.Cube.Position   = new Vector3(p.X, p.Y + 0.5f, p.Z);
+        avatar.Cube.Quaternion = new Quaternion(r.X, r.Y, r.Z, r.W);
         if (!string.IsNullOrEmpty(state.DisplayName))
             avatar.Label.Text = state.DisplayName;
     }

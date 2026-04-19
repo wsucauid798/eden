@@ -19,60 +19,60 @@ namespace Eden.Viewer;
 /// </remarks>
 public partial class PrimRenderer : Node3D
 {
-    private readonly Dictionary<EdenId<PrimTag>, MeshInstance3D> _meshes = new();
-    private readonly ConcurrentQueue<PrimState> _pending = new();
+	private readonly Dictionary<EdenId<PrimTag>, MeshInstance3D> _meshes = new();
+	private readonly ConcurrentQueue<PrimState> _pending = new();
 
-    /// <summary>Live view of the prim meshes keyed by prim id. Exposed for
-    /// tests and for inspector nodes (minimap, pick cursors, etc.).</summary>
-    public IReadOnlyDictionary<EdenId<PrimTag>, MeshInstance3D> Meshes => _meshes;
+	/// <summary>Live view of the prim meshes keyed by prim id. Exposed for
+	/// tests and for inspector nodes (minimap, pick cursors, etc.).</summary>
+	public IReadOnlyDictionary<EdenId<PrimTag>, MeshInstance3D> Meshes => _meshes;
 
-    public void Bind(ViewerClient client)
-    {
-        client.PrimUpdated += state => _pending.Enqueue(state);
-        foreach (var snapshot in client.RemotePrims.Values)
-            _pending.Enqueue(snapshot);
-    }
+	public void Bind(ViewerClient client)
+	{
+		client.PrimUpdated += state => _pending.Enqueue(state);
+		foreach (var snapshot in client.RemotePrims.Values)
+			_pending.Enqueue(snapshot);
+	}
 
-    public override void _Process(double delta)
-    {
-        while (_pending.TryDequeue(out var state))
-            ApplyPrimState(state);
-    }
+	public override void _Process(double delta)
+	{
+		while (_pending.TryDequeue(out var state))
+			ApplyPrimState(state);
+	}
 
-    /// <summary>Create-or-update the mesh for this prim. Called on the main
-    /// thread by <see cref="_Process"/>, or directly by tests.</summary>
-    public void ApplyPrimState(PrimState state)
-    {
-        if (!_meshes.TryGetValue(state.Id, out var mesh))
-        {
-            mesh = new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One } };
-            AddChild(mesh);
+	/// <summary>Create-or-update the mesh for this prim. Called on the main
+	/// thread by <see cref="_Process"/>, or directly by tests.</summary>
+	public void ApplyPrimState(PrimState state)
+	{
+		if (!_meshes.TryGetValue(state.Id, out var mesh))
+		{
+			mesh = new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One } };
+			AddChild(mesh);
 
-            // Pick collider — a StaticBody3D with a BoxShape matching the
-            // mesh scale. Carries the prim id as metadata so crosshair
-            // raycasts in Main can map the hit back to a TouchPrim call.
-            var body = new StaticBody3D();
-            var shape = new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } };
-            body.AddChild(shape);
-            mesh.AddChild(body);
-            body.SetMeta("prim_id", state.Id.Value.ToString("N"));
+			// Pick collider — a StaticBody3D with a BoxShape matching the
+			// mesh scale. Carries the prim id as metadata so crosshair
+			// raycasts in Main can map the hit back to a TouchPrim call.
+			var body = new StaticBody3D();
+			var shape = new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } };
+			body.AddChild(shape);
+			mesh.AddChild(body);
+			body.SetMeta("prim_id", state.Id.Value.ToString("N"));
 
-            _meshes[state.Id] = mesh;
-        }
+			_meshes[state.Id] = mesh;
+		}
 
-        var pos = state.Transform.Position;
-        var rot = state.Transform.Rotation;
-        mesh.Position = new Vector3(pos.X, pos.Y, pos.Z);
-        mesh.Quaternion = new Quaternion(rot.X, rot.Y, rot.Z, rot.W);
-        mesh.Scale    = new Vector3(state.Scale.X, state.Scale.Y, state.Scale.Z);
+		var pos = state.Transform.Position;
+		var rot = state.Transform.Rotation;
+		mesh.Position = new Vector3(pos.X, pos.Y, pos.Z);
+		mesh.Quaternion = new Quaternion(rot.X, rot.Y, rot.Z, rot.W);
+		mesh.Scale    = new Vector3(state.Scale.X, state.Scale.Y, state.Scale.Z);
 
-        mesh.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
-        {
-            AlbedoColor = new Color(
-                state.TintColor.R / 255f,
-                state.TintColor.G / 255f,
-                state.TintColor.B / 255f,
-                state.TintColor.A / 255f),
-        });
-    }
+		mesh.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+		{
+			AlbedoColor = new Color(
+				state.TintColor.R / 255f,
+				state.TintColor.G / 255f,
+				state.TintColor.B / 255f,
+				state.TintColor.A / 255f),
+		});
+	}
 }
