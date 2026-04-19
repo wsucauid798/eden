@@ -35,6 +35,7 @@ DRY_RUN="${DRY_RUN:-0}"
 issues_created=0
 project_added=0
 skipped=0
+closed=0
 failures=0
 
 # ---------- helpers ----------
@@ -70,7 +71,7 @@ ensure_label() {
 
 echo "Loading existing issues from $REPO…"
 existing_issues_json="$(gh issue list --repo "$REPO" --state all --limit 1000 \
-                         --json title,url 2>/dev/null || echo '[]')"
+                         --json title,url,number,state 2>/dev/null || echo '[]')"
 
 echo "Loading existing project items from project #$PROJECT_NUMBER…"
 existing_project_json="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" \
@@ -83,6 +84,20 @@ find_issue_url() {
   local title="$1"
   jq -r --arg t "$title" \
      'map(select(.title == $t) | .url) | .[0] // empty' \
+     <<<"$existing_issues_json"
+}
+
+find_issue_number() {
+  local title="$1"
+  jq -r --arg t "$title" \
+     'map(select(.title == $t) | .number) | .[0] // empty' \
+     <<<"$existing_issues_json"
+}
+
+find_issue_state() {
+  local title="$1"
+  jq -r --arg t "$title" \
+     'map(select(.title == $t) | .state) | .[0] // empty' \
      <<<"$existing_issues_json"
 }
 
@@ -181,6 +196,27 @@ process_file() {
       if ! sync_item "$title" "$current_phase" "$file"; then
         failures=$((failures + 1))
       fi
+    elif [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[x\][[:space:]]+(.+)$ ]]; then
+      # Checked item — close the matching GitHub issue if still open.
+      local raw="${BASH_REMATCH[1]}"
+      # Strip ~~...~~ struck-through text wrapping if present, keep core title.
+      local title="${raw#~~}"; title="${title%%~~*}"
+      title="${title#\#[0-9]* }"
+      title="${title%"${title##*[![:space:]]}"}"
+
+      local number; number="$(find_issue_number "$title")"
+      local state;  state="$(find_issue_state  "$title")"
+      if [[ -n "$number" && "$state" == "OPEN" ]]; then
+        if [[ "$DRY_RUN" == "1" ]]; then
+          echo "[dry-run] would close #$number: $title"
+        elif retry gh issue close "$number" --repo "$REPO" --reason completed >/dev/null; then
+          echo "closed #$number: $title"
+          closed=$((closed + 1))
+        else
+          echo "FAIL close #$number: $title" >&2
+          failures=$((failures + 1))
+        fi
+      fi
     fi
   done < "$file"
 }
@@ -190,6 +226,6 @@ for f in "$@"; do
 done
 
 echo
-echo "summary: issues_created=$issues_created project_added=$project_added skipped=$skipped failures=$failures"
+echo "summary: issues_created=$issues_created project_added=$project_added closed=$closed skipped=$skipped failures=$failures"
 
 [[ "$failures" -eq 0 ]]

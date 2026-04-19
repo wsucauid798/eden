@@ -87,10 +87,10 @@ explicitly decided to be *no replacement*.
 ## Phase 2 — Foundation
 
 - [x] ~~Create `Eden.Shared` project~~ Scaffolded at `Eden.Shared/` with `EdenVersion.cs` as anchor. Domain types will be added as wire-protocol work progresses.
-- [ ] Populate `Eden.Shared` with domain types: `Vector3`, `AvatarState`, `Prim`, `ItemId`, event shapes, wire messages
-- [ ] Move domain types from surviving `Eden/Framework` into `Eden.Shared`
-- [ ] Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server
-- [ ] Implement wire protocol transport (server side) — QUIC via `System.Net.Quic`
+- [x] ~~Populate `Eden.Shared` with domain types~~ Math (`Vector3`, `Quaternion`, `Color`, `Transform`), tagged IDs (`EdenId<TTag>`), entities (`AvatarState`, `PrimState`), wire envelope + `ClientHello`/`ServerHello`/`Ping`/`Pong`/`AvatarUpdate`/`AvatarLeft`/`PrimUpdate`/`ChatMessage`. 6 round-trip tests green.
+- [ ] Move domain types from surviving `Eden/Framework` into `Eden.Shared` — not needed; Eden.Shared is a fresh model, legacy `Eden/Framework` gets deleted with the rest of the Linden stack at the Phase 1→2 boundary.
+- [x] ~~Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server~~ Decided against — went direct QUIC via `System.Net.Quic` (`EdenLauncher.StartHostAsync`). No HTTP layer in the runtime.
+- [x] ~~Implement wire protocol transport (server side) — QUIC via `System.Net.Quic`~~ `QuicTransport` + `InMemoryTransport` both implement `ITransport`. Multi-client server (`EdenServer.HandleClientAsync`) with avatar registry + broadcast. `QuicHostIntegrationTests` exercises real QUIC end-to-end.
 - [ ] Register custom MessagePack formatters for the `Eden.Shared` domain types (index-keyed, not property-name-keyed) — brings typical `AvatarState` from ~250 B down to ~100 B without polluting records with `[Key]` attributes
 - [ ] Replace config layer with `Microsoft.Extensions.Configuration`
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
@@ -100,10 +100,10 @@ explicitly decided to be *no replacement*.
 - [ ] Audit `Mono.Cecil` usage — likely only Mono.Addins internals; should die with the Mono.Addins removal
 - [x] ~~Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`~~ Prebuild removed; all csproj files tracked as SDK-style, solution `Eden.sln` tracked. Central package management (`Directory.Packages.props`) deferred until HintPath refs are converted to PackageReferences.
 - [x] ~~Bump target framework `net8_0` → `net10_0`~~ Done across all csproj files; `global.json` pins SDK to 10.0.100+.
-- [ ] Pin monorepo layout — where `Eden.Shared`, `Eden.Server`, `Eden.Viewer` live relative to the surviving `Eden/` tree
-- [ ] Decide central package management (`Directory.Packages.props`) vs per-project `PackageReference`
+- [x] ~~Pin monorepo layout~~ Settled: `Eden.Shared` / `Eden.Client` / `Eden.Server.Core` / `Eden.Launcher` / `Eden.Viewer` at repo root; the legacy `Eden/` tree is Phase-1 survivors awaiting Phase 2 deletion.
+- [ ] Decide central package management (`Directory.Packages.props`) vs per-project `PackageReference` — currently per-project
 - [ ] Pick DI container — default to `Microsoft.Extensions.DependencyInjection` unless reason not to
-- [ ] Define wire protocol versioning scheme from day 1 (e.g. path-based `/v1/…`)
+- [x] ~~Define wire protocol versioning scheme from day 1~~ `EdenVersion.WireProtocol` constant shipped in `ClientHello`/`ServerHello`; server rejects mismatched versions. Path-based `/v1/…` N/A (QUIC, not HTTP).
 - [ ] Add health-check / liveness endpoint to the server host
 
 ---
@@ -115,7 +115,7 @@ explicitly decided to be *no replacement*.
 - [ ] Roslyn-based script host; trust-model sandbox initially
 - [ ] Physics re-integration against Bullet
 - [ ] Asset / inventory / user services exposed over new wire protocol
-- [ ] Integration tests that spin up a server and hit endpoints
+- [x] ~~Integration tests that spin up a server and hit endpoints~~ `Eden.Shared.Tests` covers handshake, multi-client avatar registry, broadcast + spoof-guard, QUIC end-to-end, ViewerClient mirror. 28 tests green.
 - [ ] Lock the scripting API shape with a worked sample in `_docs/_design/` (`async Task OnTouch(Avatar who)`, etc.)
 - [ ] Enumerate the script event surface (touch, collision, timer, money, sensor, link_message, …)
 - [ ] Choose region persistence format (JSON, custom binary, SQLite rows)
@@ -124,11 +124,11 @@ explicitly decided to be *no replacement*.
 
 ## Phase 4 — Viewer
 
-- [ ] `Eden.Viewer` — Godot 4 + C# project scaffolding
-- [ ] Wire protocol client in viewer (consuming `Eden.Shared`)
-- [ ] Basic scene rendering: avatars + prims + terrain
-- [ ] Input and camera
-- [ ] Minimal UI: chat, inventory, minimap, settings
+- [x] ~~`Eden.Viewer` — Godot 4 + C# project scaffolding~~ Godot 4.6.1 .NET project, references `Eden.Shared` + `Eden.Client` + `Eden.Launcher`. Not in the main .sln (needs Godot editor for first build).
+- [x] ~~Wire protocol client in viewer (consuming `Eden.Shared`)~~ `Eden.Client.ViewerClient` — handshake, state mirror, events. 4 tests.
+- [x] ~~Basic scene rendering: avatars + prims + terrain~~ Partial — floor + cube avatars + name labels. Prims not yet.
+- [x] ~~Input and camera~~ Third-person rig with yaw/pitch mouse-look, WASD camera-relative, Esc captures/releases.
+- [ ] Minimal UI: chat, inventory, minimap, settings — HUD only so far (mode / name / coords / peer count). Chat + rest pending.
 - [ ] Asset streaming and caching
 - [ ] Choose asset formats — glTF for meshes, Opus for audio, format for avatars
 - [ ] Input rebinding UI and gamepad support
