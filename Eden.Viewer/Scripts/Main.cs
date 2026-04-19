@@ -16,15 +16,14 @@ namespace Eden.Viewer;
 /// <summary>
 /// Root scene built entirely in code — no .tscn scene content needed.
 /// <para>
-/// Mode is picked from environment variables (so values propagate through
-/// Godot's editor into the running game, which command-line args do not):
+/// On launch a simple mode menu is shown. Press:
 /// <list type="bullet">
-///   <item><c>EDEN_MODE</c> = <c>solo</c> (default) / <c>host</c> / <c>join</c></item>
-///   <item><c>EDEN_PORT</c> = port for host/join (default 5001)</item>
-///   <item><c>EDEN_HOST</c> = target hostname for join (default localhost)</item>
+///   <item><c>1</c> — solo (private, in-process world)</item>
+///   <item><c>2</c> — host (opens a QUIC listener on port 5001)</item>
+///   <item><c>3</c> — join (connects to localhost:5001)</item>
 /// </list>
-/// Set them in the shell *before* launching Godot:
-/// <code>set EDEN_MODE=host &amp; godot --path Eden.Viewer</code>
+/// Env vars <c>EDEN_MODE</c>, <c>EDEN_HOST</c>, <c>EDEN_PORT</c> auto-select
+/// and skip the menu if present.
 /// </para>
 /// </summary>
 public partial class Main : Node3D
@@ -38,17 +37,104 @@ public partial class Main : Node3D
     private HostHandle?   _host;
     private ViewerClient? _client;
     private MeshInstance3D? _playerCube;
+    private Label? _menuLabel;
 
     private readonly Dictionary<EdenId<UserTag>, MeshInstance3D> _remoteCubes    = new();
     private readonly ConcurrentQueue<AvatarState>                _pendingUpdates = new();
     private readonly ConcurrentQueue<EdenId<UserTag>>            _pendingLeaves  = new();
 
     private double _sendAccumulator;
+    private bool   _started;
 
-    public override async void _Ready()
+    public override void _Ready()
     {
+        // If env vars pre-select a mode, start immediately and skip the menu.
+        var envMode = (OS.GetEnvironment("EDEN_MODE") ?? "").ToLowerInvariant();
+        if (envMode is "solo" or "host" or "join")
+        {
+            _ = StartAsync(envMode);
+            return;
+        }
+
+        ShowMenu();
+    }
+
+    public override async void _Input(InputEvent @event)
+    {
+        if (_started || @event is not InputEventKey { Pressed: true } key) return;
+
+        var mode = key.Keycode switch
+        {
+            Key.Key1 or Key.Kp1 => "solo",
+            Key.Key2 or Key.Kp2 => "host",
+            Key.Key3 or Key.Kp3 => "join",
+            _ => null,
+        };
+        if (mode is null) return;
+
+        await StartAsync(mode);
+    }
+
+    private void ShowMenu()
+    {
+        _menuLabel = new Label
+        {
+            Text = "Pick mode:\n\n  [1] Solo\n  [2] Host\n  [3] Join (localhost:5001)",
+            AnchorsPreset = (int)Control.LayoutPreset.Center,
+            OffsetLeft   = -200,
+            OffsetTop    = -60,
+            OffsetRight  =  200,
+            OffsetBottom =  60,
+        };
+        _menuLabel.AddThemeFontSizeOverride("font_size", 24);
+        AddChild(_menuLabel);
+    }
+
+    private async Task StartAsync(string mode)
+    {
+        if (_started) return;
+        _started = true;
+
+        _menuLabel?.QueueFree();
+        _menuLabel = null;
+
         BuildScene();
-        await StartEdenAsync();
+
+        var transport = await ResolveTransportAsync(mode);
+
+        _client = new ViewerClient(transport);
+        _client.AvatarUpdated += state  => _pendingUpdates.Enqueue(state);
+        _client.AvatarLeft    += userId => _pendingLeaves.Enqueue(userId);
+
+        await _client.ConnectAsync(OS.GetEnvironment("USERNAME") ?? "Player");
+        GD.Print($"[Eden] connected. My UserId = {_client.MyUserId}");
+
+        await SendCurrentPoseAsync();
+    }
+
+    private async Task<ITransport> ResolveTransportAsync(string mode)
+    {
+        var port = int.TryParse(OS.GetEnvironment("EDEN_PORT"), out var p) ? p : DefaultPort;
+        var host = !string.IsNullOrWhiteSpace(OS.GetEnvironment("EDEN_HOST"))
+                    ? OS.GetEnvironment("EDEN_HOST")
+                    : "localhost";
+
+        switch (mode)
+        {
+            case "host":
+                _host = await EdenLauncher.StartHostAsync(port);
+                GD.Print($"[Eden] hosting on port {_host.LocalEndPoint.Port}");
+                return _host.Transport;
+
+            case "join":
+                GD.Print($"[Eden] joining {host}:{port}");
+                return await EdenLauncher.ConnectAsync(host, port);
+
+            default:
+                _solo = EdenLauncher.StartSolo();
+                GD.Print("[Eden] solo mode");
+                return _solo.Transport;
+        }
     }
 
     // ---- scene construction ----
@@ -88,52 +174,11 @@ public partial class Main : Node3D
         AddChild(_playerCube);
     }
 
-    // ---- Eden wiring ----
-
-    private async Task StartEdenAsync()
-    {
-        var transport = await ResolveTransportAsync();
-
-        _client = new ViewerClient(transport);
-        _client.AvatarUpdated += state  => _pendingUpdates.Enqueue(state);
-        _client.AvatarLeft    += userId => _pendingLeaves.Enqueue(userId);
-
-        await _client.ConnectAsync(OS.GetEnvironment("USERNAME") ?? "Player");
-        GD.Print($"[Eden] connected. My UserId = {_client.MyUserId}");
-
-        await SendCurrentPoseAsync();
-    }
-
-    private async Task<ITransport> ResolveTransportAsync()
-    {
-        var mode = (OS.GetEnvironment("EDEN_MODE") ?? "").ToLowerInvariant();
-        var port = int.TryParse(OS.GetEnvironment("EDEN_PORT"), out var p) ? p : DefaultPort;
-        var host = !string.IsNullOrWhiteSpace(OS.GetEnvironment("EDEN_HOST"))
-                    ? OS.GetEnvironment("EDEN_HOST")
-                    : "localhost";
-
-        switch (mode)
-        {
-            case "host":
-                _host = await EdenLauncher.StartHostAsync(port);
-                GD.Print($"[Eden] hosting on port {_host.LocalEndPoint.Port}");
-                return _host.Transport;
-
-            case "join":
-                GD.Print($"[Eden] joining {host}:{port}");
-                return await EdenLauncher.ConnectAsync(host, port);
-
-            default:
-                _solo = EdenLauncher.StartSolo();
-                GD.Print("[Eden] solo mode");
-                return _solo.Transport;
-        }
-    }
-
     // ---- per-frame ----
 
     public override void _Process(double delta)
     {
+        if (!_started) return;
         HandleMovement(delta);
         ApplyPendingRemoteEvents();
         MaybeSendPose(delta);
