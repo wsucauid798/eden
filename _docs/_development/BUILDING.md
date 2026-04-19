@@ -3,7 +3,7 @@
 ## Requirements
 
 * [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (pinned via `global.json`)
-* **Godot 4.6.1 Mono** — only if you want to build the viewer. The server
+* **Godot 4.6.2 Mono** — only if you want to build the viewer. The server
   CLI builds without Godot. Either put the Godot binary on `PATH`, or
   set `GODOT_BIN=<path-to-executable>` for the build scripts.
 

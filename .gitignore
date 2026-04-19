@@ -11,10 +11,9 @@
 # ----- Design notes (local, not for sharing) -----
 _docs/_design/
 
-# ----- .NET build output -----
+# ----- .NET / Godot build output -----
 **/obj/
-**/bin/Debug/
-**/bin/Release/
+**/bin/
 
 # ----- Published artifacts (produced by scripts/build.ps1 / build.sh) -----
 /build/*

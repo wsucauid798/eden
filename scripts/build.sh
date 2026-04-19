@@ -59,7 +59,10 @@ if [[ -n "${GODOT_BIN:-}" && -x "$GODOT_BIN" ]]; then
     godot="$GODOT_BIN"
 fi
 if [[ -z "$godot" ]]; then
-    for c in godot godot4 Godot Godot_mono Godot_v4.6.1-stable_mono_win64 \
+    for c in godot godot4 Godot Godot_mono \
+             Godot_v4.6.2-stable_mono_win64 \
+             Godot_v4.6.1-stable_mono_win64 \
+             Godot_v4.6.2-stable_mono_linux.x86_64 \
              Godot_v4.6.1-stable_mono_linux.x86_64 \
              "/Applications/Godot_mono.app/Contents/MacOS/Godot"; do
         if command -v "$c" >/dev/null 2>&1; then godot="$c"; break; fi

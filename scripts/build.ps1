@@ -58,14 +58,18 @@ if ($env:GODOT_BIN -and (Test-Path $env:GODOT_BIN)) {
 }
 if (-not $godot) {
     foreach ($name in @('godot', 'godot4', 'Godot', 'Godot_mono',
+                        'Godot_v4.6.2-stable_mono_win64',
                         'Godot_v4.6.1-stable_mono_win64')) {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($cmd) { $godot = $cmd.Source; break }
     }
 }
 if (-not $godot) {
-    $fallback = 'C:\Program Files\Godot\Godot_v4.6.1-stable_mono_win64.exe'
-    if (Test-Path $fallback) { $godot = $fallback }
+    $fallbacks = @(
+        'C:\Program Files\Godot\Godot_v4.6.2-stable_mono_win64.exe',
+        'C:\Program Files\Godot\Godot_v4.6.1-stable_mono_win64.exe'
+    )
+    foreach ($p in $fallbacks) { if (Test-Path $p) { $godot = $p; break } }
 }
 
 if (-not $godot) {
