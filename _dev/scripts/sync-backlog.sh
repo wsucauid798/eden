@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
 #
 # Parse markdown backlog files and sync their unchecked items into GitHub as
-# issues under a Projects v2 board. Idempotent — issues whose title already
-# exists in the repo (any state) are skipped.
+# issues *and* add them to a Projects v2 board. Idempotent on both sides:
+#   - issues whose title already exists in the repo are not re-created
+#   - issues whose URL is already in the project are not re-added
+# Orphan issues (exist in repo but not in project) are swept into the project.
 #
 # Usage:
 #   PROJECT_NUMBER=<n> ./sync-backlog.sh <file.md> [<file.md> ...]
 #
 # Environment:
-#   PROJECT_NUMBER   required — your GitHub Projects v2 number
+#   PROJECT_NUMBER   required — GitHub Projects v2 number
 #   REPO             optional — defaults to the current repo
-#   OWNER            optional — defaults to @me (the authenticated PAT user)
-#   DRY_RUN          optional — set to 1 to print actions without creating
-#
-# Conventions:
-#   - Section headers (## Phase 0 — Groundwork) become labels.
-#   - Unchecked items (- [ ] text) become issues; checked items (- [x]) skip.
-#   - Matching is by exact title; do not rename items after seeding.
+#   OWNER            optional — defaults to @me
+#   DRY_RUN          optional — set to 1 to print actions without mutating
 #
 
 set -uo pipefail
@@ -35,7 +32,8 @@ REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
 OWNER="${OWNER:-@me}"
 DRY_RUN="${DRY_RUN:-0}"
 
-created=0
+issues_created=0
+project_added=0
 skipped=0
 failures=0
 
@@ -48,7 +46,6 @@ slugify() {
     | cut -c1-48
 }
 
-# Retry a command up to N times with exponential backoff on failure.
 retry() {
   local attempts=3 i=0 sleep_s=2
   while (( i < attempts )); do
@@ -69,58 +66,92 @@ ensure_label() {
   gh label create "$label" --color ededed --force --repo "$REPO" >/dev/null 2>&1 || true
 }
 
-# ---------- load existing issues once ----------
+# ---------- caches ----------
 
 echo "Loading existing issues from $REPO…"
-existing_titles_json="$(gh issue list --repo "$REPO" --state all --limit 1000 \
-                         --json title 2>/dev/null || echo '[]')"
+existing_issues_json="$(gh issue list --repo "$REPO" --state all --limit 1000 \
+                         --json title,url 2>/dev/null || echo '[]')"
 
-issue_exists() {
+echo "Loading existing project items from project #$PROJECT_NUMBER…"
+existing_project_json="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" \
+                          --format json --limit 1000 2>/dev/null \
+                          || echo '{"items":[]}')"
+existing_project_urls="$(jq -r '.items[]?.content.url // empty' \
+                         <<<"$existing_project_json" | sort -u)"
+
+find_issue_url() {
   local title="$1"
-  jq -e --arg t "$title" 'map(.title) | index($t) != null' \
-     <<<"$existing_titles_json" >/dev/null 2>&1
+  jq -r --arg t "$title" \
+     'map(select(.title == $t) | .url) | .[0] // empty' \
+     <<<"$existing_issues_json"
 }
 
-# After creating an issue, append its title so later items in the same run
-# also see it.
+url_in_project() {
+  local url="$1"
+  [[ -z "$url" ]] && return 1
+  grep -Fxq "$url" <<<"$existing_project_urls"
+}
+
 remember_issue() {
-  local title="$1"
-  existing_titles_json="$(jq --arg t "$title" '. + [{title: $t}]' \
-                           <<<"$existing_titles_json")"
+  local title="$1" url="$2"
+  existing_issues_json="$(jq --arg t "$title" --arg u "$url" \
+                           '. + [{title: $t, url: $u}]' \
+                           <<<"$existing_issues_json")"
+}
+
+remember_project_url() {
+  local url="$1"
+  existing_project_urls="$(printf '%s\n%s\n' "$existing_project_urls" "$url" | sort -u)"
 }
 
 # ---------- per-item work ----------
 
-create_issue_and_add() {
+sync_item() {
   local title="$1" phase="$2" file="$3"
-  local label body url
+  local label url body
   label="$(slugify "$phase")"
   body="From [\`$file\`]($file) — **$phase**"
 
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "[dry-run] would create: $title (label=$label)"
+  url="$(find_issue_url "$title")"
+
+  # 1. Create the issue if it doesn't exist yet.
+  if [[ -z "$url" ]]; then
+    if [[ "$DRY_RUN" == "1" ]]; then
+      echo "[dry-run] would create issue: $title"
+      url="dry-run://$title"
+    else
+      ensure_label "$label"
+      if ! url=$(retry gh issue create --repo "$REPO" --title "$title" \
+                        ${label:+--label "$label"} --body "$body"); then
+        echo "FAIL create issue: $title" >&2
+        return 1
+      fi
+      echo "issue: $title -> $url"
+      remember_issue "$title" "$url"
+      issues_created=$((issues_created + 1))
+    fi
+  fi
+
+  # 2. Add to project if it's not already there.
+  if url_in_project "$url"; then
+    skipped=$((skipped + 1))
     return 0
   fi
 
-  ensure_label "$label"
-
-  if ! url=$(retry gh issue create --repo "$REPO" --title "$title" \
-                    ${label:+--label "$label"} --body "$body"); then
-    echo "FAIL create: $title" >&2
-    return 1
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "[dry-run] would add to project: $title ($url)"
+    return 0
   fi
 
   if ! retry gh project item-add "$PROJECT_NUMBER" \
                --owner "$OWNER" --url "$url" >/dev/null; then
     echo "FAIL project-add: $title ($url)" >&2
-    # Issue created but not added to project. Still counts as a partial
-    # success — user can re-run or add manually.
-    remember_issue "$title"
     return 1
   fi
 
-  remember_issue "$title"
-  echo "added: $title -> $url"
+  echo "project: $title"
+  remember_project_url "$url"
+  project_added=$((project_added + 1))
   return 0
 }
 
@@ -144,18 +175,10 @@ process_file() {
 
     if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[[[:space:]]\][[:space:]]+(.+)$ ]]; then
       local title="${BASH_REMATCH[1]}"
-      title="${title#\#[0-9]* }"                       # strip "#42 " prefix
-      title="${title%"${title##*[![:space:]]}"}"        # rtrim
+      title="${title#\#[0-9]* }"
+      title="${title%"${title##*[![:space:]]}"}"
 
-      if issue_exists "$title"; then
-        echo "exists: $title"
-        skipped=$((skipped + 1))
-        continue
-      fi
-
-      if create_issue_and_add "$title" "$current_phase" "$file"; then
-        created=$((created + 1))
-      else
+      if ! sync_item "$title" "$current_phase" "$file"; then
         failures=$((failures + 1))
       fi
     fi
@@ -167,7 +190,6 @@ for f in "$@"; do
 done
 
 echo
-echo "summary: created=$created skipped=$skipped failures=$failures"
+echo "summary: issues_created=$issues_created project_added=$project_added skipped=$skipped failures=$failures"
 
-# Exit non-zero if any item failed, but only after processing everything.
 [[ "$failures" -eq 0 ]]
