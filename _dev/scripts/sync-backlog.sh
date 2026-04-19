@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 #
-# Parse markdown backlog files and sync them with GitHub Issues + a
-# Projects v2 board, using the issue **number** as the canonical link
-# (not the title text).
+# One-way sync: backlog markdown -> GitHub Issues + Projects v2 board.
 #
-# On first encounter of a line, creates an issue and rewrites the line
-# to embed `#NNN` after the checkbox:
-#     - [ ] text                 →  - [ ] #42 text
-# Subsequent runs use the `#NNN` to decide what to do:
-#     - [ ] #42 text             →  ensure issue is open + in project
-#     - [x] #42 text             →  close issue #42 (idempotent)
+# What it does:
+#   - For each `- [ ]` line without `#NNN`: create the issue, insert
+#     `#NNN` into the line, add to the project.
+#   - For each `- [ ]` line with `#NNN`: ensure it's in the project.
+#   - For each `- [x]` line: **skip** — closure is the user's manual
+#     action on GitHub. The backlog being ticked is a local signal,
+#     nothing more.
 #
-# Legacy lines without `#NNN` fall back to title-prefix matching so
-# migration happens automatically.
+# Legacy lines without `#NNN` try a title prefix-match against existing
+# issues before creating, so prior issues get linked instead of duplicated.
 #
 # Usage:
 #   PROJECT_NUMBER=<n> ./sync-backlog.sh <file.md> [<file.md> ...]
@@ -43,7 +42,6 @@ DRY_RUN="${DRY_RUN:-0}"
 issues_created=0
 project_added=0
 linked=0
-closed=0
 skipped=0
 failures=0
 
@@ -185,22 +183,6 @@ add_to_project() {
   return 0
 }
 
-close_issue() {
-  local number="$1" title="$2"
-  local state; state="$(issue_state_by_number "$number")"
-  [[ "$state" != "OPEN" ]] && return 0  # already closed or unknown
-
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "[dry-run] would close #$number: $title"
-    return 0
-  fi
-
-  if ! retry gh issue close "$number" --repo "$REPO" --reason completed >/dev/null; then
-    return 1
-  fi
-  return 0
-}
-
 # ---------- per-file processing ----------
 
 # Rewrites the file in-place, inserting `#NNN ` after the checkbox for any
@@ -239,10 +221,9 @@ process_file() {
       continue
     fi
 
-    # Checked line: - [x] [#NNN] title
-    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[x\][[:space:]]+(.+)$ ]]; then
-      local body="${BASH_REMATCH[1]}"
-      process_closed_line "$body"
+    # Checked line: skip — closure is manual on GitHub.
+    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[x\][[:space:]]+ ]]; then
+      skipped=$((skipped + 1))
       continue
     fi
   done
@@ -298,46 +279,11 @@ process_open_line() {
   fi
 }
 
-# Process a checked `- [x]` line. Closes the linked issue if open.
-process_closed_line() {
-  local body="$1"
-  local number=""
-  if [[ "$body" =~ ^#([0-9]+)[[:space:]]+(.*)$ ]]; then
-    number="${BASH_REMATCH[1]}"
-  fi
-
-  if [[ -z "$number" ]]; then
-    # Legacy: try title-prefix match. Strip ~~...~~ wrapping if present.
-    local title="${body#~~}"; title="${title%%~~*}"
-    title="${title%"${title##*[![:space:]]}"}"
-    number="$(find_issue_number_by_title "$title")"
-    if [[ -z "$number" ]]; then
-      skipped=$((skipped + 1))
-      return
-    fi
-  fi
-
-  if close_issue "$number" "$body"; then
-    # Only count if actually transitioned from OPEN; close_issue is silent
-    # when already closed. We re-check state to avoid double-counting.
-    local state; state="$(issue_state_by_number "$number")"
-    if [[ "$state" == "OPEN" ]]; then
-      echo "closed #$number"
-      closed=$((closed + 1))
-    else
-      skipped=$((skipped + 1))
-    fi
-  else
-    echo "FAIL close #$number" >&2
-    failures=$((failures + 1))
-  fi
-}
-
 for f in "$@"; do
   process_file "$f"
 done
 
 echo
-echo "summary: issues_created=$issues_created linked=$linked project_added=$project_added closed=$closed skipped=$skipped failures=$failures"
+echo "summary: issues_created=$issues_created linked=$linked project_added=$project_added skipped=$skipped failures=$failures"
 
 [[ "$failures" -eq 0 ]]
