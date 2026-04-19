@@ -49,8 +49,9 @@ public partial class Main : Node3D
     private HostHandle?   _host;
     private ViewerClient? _client;
 
-    private MeshInstance3D? _playerCube;
-    private Label3D?        _playerLabel;
+    private CharacterBody3D? _playerCube;
+    private MeshInstance3D?  _playerMesh;
+    private Label3D?         _playerLabel;
     private Node3D?         _cameraRig;
     private Node3D?         _yawPivot;
     private Node3D?         _pitchPivot;
@@ -60,9 +61,11 @@ public partial class Main : Node3D
     private WorldRenderer?  _world;
     private PrimRenderer?   _prims;
 
-    private float _cameraDistance = CameraDistance;
-    private float _velocityY;
-    private bool  _isFlying;
+    private float  _cameraDistance = CameraDistance;
+    private bool   _isFlying;
+    private bool   _isSprinting;
+    private double _lastForwardReleaseTime = -1;
+    private const float DoubleTapWindowSeconds = 0.3f;
 
     private readonly Dictionary<EdenId<UserTag>, RemoteAvatar> _remote          = new();
     private readonly ConcurrentQueue<AvatarState>              _pendingUpdates  = new();
@@ -111,6 +114,22 @@ public partial class Main : Node3D
 
         switch (@event)
         {
+            // Double-tap forward (W or Up) to start sprinting. Releasing the
+            // key ends the sprint.
+            case InputEventKey ek when ek.Keycode == Key.W || ek.Keycode == Key.Up:
+                var now = Time.GetTicksMsec() / 1000.0;
+                if (ek is { Pressed: true, Echo: false })
+                {
+                    if (now - _lastForwardReleaseTime <= DoubleTapWindowSeconds)
+                        _isSprinting = true;
+                }
+                else if (!ek.Pressed)
+                {
+                    _lastForwardReleaseTime = now;
+                    _isSprinting = false;
+                }
+                break;
+
             // Hold right mouse button to rotate the camera. Mouse is never
             // captured — the cursor stays free for clicking and for the OS.
             case InputEventMouseMotion mm when Input.IsMouseButtonPressed(MouseButton.Right):
@@ -167,10 +186,15 @@ public partial class Main : Node3D
         await _client.TouchPrimAsync(new EdenId<PrimTag>(g));
     }
 
-    public override void _Process(double delta)
+    public override void _PhysicsProcess(double delta)
     {
         if (!_started) return;
         HandleMovement(delta);
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!_started) return;
         UpdateCameraRig();
         ApplyPendingRemoteEvents();
         UpdateHud();
@@ -228,9 +252,9 @@ public partial class Main : Node3D
 
         // Tint the local cube with the colour derived from our UserId so it
         // matches what every other viewer will see us as.
-        if (_playerCube is not null)
+        if (_playerMesh is not null)
         {
-            _playerCube.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+            _playerMesh.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
             {
                 AlbedoColor = ColorForUser(_client.MyUserId),
             });
@@ -301,21 +325,27 @@ public partial class Main : Node3D
         });
         AddChild(floor);
 
+        // Physics collider for the floor — an infinite Y=0 plane so the
+        // player's CharacterBody3D has something to stand and land on.
+        var floorBody = new StaticBody3D();
+        floorBody.AddChild(new CollisionShape3D { Shape = new WorldBoundaryShape3D() });
+        AddChild(floorBody);
+
         // A few reference props so the world isn't two cubes in a void.
         BuildReferenceProps();
 
-        // Player cube — colour derived from our server-assigned UserId in
-        // StartAsync so every viewer sees us in the same colour. Neutral
-        // grey until then.
-        _playerCube = new MeshInstance3D
-        {
-            Mesh     = new BoxMesh { Size = Vector3.One },
-            Position = new Vector3(0f, 0.5f, 0f),
-        };
-        _playerCube.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+        // Player body — CharacterBody3D so movement, jumping, gravity, and
+        // collisions all go through Godot physics instead of hand-rolled
+        // position math. Visible cube and box collider are both children;
+        // MoveAndSlide is driven from _PhysicsProcess.
+        _playerCube = new CharacterBody3D { Position = new Vector3(0f, GroundY, 0f) };
+        _playerMesh = new MeshInstance3D  { Mesh = new BoxMesh { Size = Vector3.One } };
+        _playerMesh.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
         {
             AlbedoColor = new Color(0.55f, 0.55f, 0.60f),
         });
+        _playerCube.AddChild(_playerMesh);
+        _playerCube.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
         AddChild(_playerCube);
 
         _playerLabel = BuildNameLabel(_displayName);
@@ -368,6 +398,7 @@ public partial class Main : Node3D
             Roughness   = 0.6f,
             Metallic    = 0.1f,
         });
+        AttachStaticBody(mono, new BoxShape3D { Size = new Vector3(2f, 8f, 2f) });
         AddChild(mono);
 
         // Ring of 8 pillars at radius 25.
@@ -392,6 +423,7 @@ public partial class Main : Node3D
                 AlbedoColor = new Color(0.80f, 0.78f, 0.72f),
                 Roughness   = 0.7f,
             });
+            AttachStaticBody(pillar, new CylinderShape3D { Height = 5f, Radius = 1.0f });
             AddChild(pillar);
         }
 
@@ -406,6 +438,7 @@ public partial class Main : Node3D
             AlbedoColor = new Color(0.90f, 0.40f, 0.35f),
             Roughness   = 0.4f,
         });
+        AttachStaticBody(sphereA, new SphereShape3D { Radius = 1.2f });
         AddChild(sphereA);
 
         var sphereB = new MeshInstance3D
@@ -418,7 +451,17 @@ public partial class Main : Node3D
             AlbedoColor = new Color(0.35f, 0.75f, 0.50f),
             Roughness   = 0.4f,
         });
+        AttachStaticBody(sphereB, new SphereShape3D { Radius = 0.9f });
         AddChild(sphereB);
+    }
+
+    /// <summary>Attach a <see cref="StaticBody3D"/> child with the given
+    /// shape so the player's CharacterBody3D can collide with this prop.</summary>
+    private static void AttachStaticBody(Node3D parent, Shape3D shape)
+    {
+        var body = new StaticBody3D();
+        body.AddChild(new CollisionShape3D { Shape = shape });
+        parent.AddChild(body);
     }
 
     /// <summary>Deterministic colour from a <see cref="EdenId{UserTag}"/>.
@@ -479,15 +522,19 @@ public partial class Main : Node3D
         var input = new Vector3(right - left, 0f, back - fwd);
 
         var speed = MoveSpeed;
-        if (Input.IsKeyPressed(Key.Shift)) speed *= SprintMultiplier;
+        if (_isSprinting) speed *= SprintMultiplier;
 
+        var worldDir = Vector3.Zero;
         if (input != Vector3.Zero)
         {
             var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
-            var worldDir = (yawBasis * input.Normalized()).Normalized();
-            _playerCube.Position += worldDir * speed * dt;
+            worldDir = (yawBasis * input.Normalized()).Normalized();
             _playerCube.Rotation = new Vector3(0f, Mathf.Atan2(-worldDir.X, -worldDir.Z), 0f);
         }
+
+        var vel = _playerCube.Velocity;
+        vel.X = worldDir.X * speed;
+        vel.Z = worldDir.Z * speed;
 
         // Vertical — fly while Page Up/Down held, otherwise gravity + Space jump.
         var pageUp   = Input.IsKeyPressed(Key.Pageup);
@@ -495,37 +542,30 @@ public partial class Main : Node3D
 
         if (pageUp)
         {
-            _isFlying  = true;
-            _velocityY = FlySpeed;
+            _isFlying = true;
+            vel.Y = FlySpeed;
         }
         else if (_isFlying && pageDown)
         {
-            _velocityY = -FlySpeed;
+            vel.Y = -FlySpeed;
         }
         else if (_isFlying)
         {
-            _velocityY = 0f;            // hover
+            vel.Y = 0f;                 // hover
         }
         else
         {
-            var grounded = _playerCube.Position.Y <= GroundY + 0.001f && _velocityY <= 0f;
-            _velocityY = grounded && Input.IsKeyPressed(Key.Space)
+            vel.Y = _playerCube.IsOnFloor() && Input.IsKeyPressed(Key.Space)
                 ? JumpVelocity
-                : _velocityY - Gravity * dt;
+                : vel.Y - Gravity * dt;
         }
 
-        _playerCube.Position = new Vector3(
-            _playerCube.Position.X,
-            _playerCube.Position.Y + _velocityY * dt,
-            _playerCube.Position.Z);
+        _playerCube.Velocity = vel;
+        _playerCube.MoveAndSlide();
 
-        // Ground clamp and fly-mode exit.
-        if (_playerCube.Position.Y < GroundY)
-        {
-            _playerCube.Position = new Vector3(_playerCube.Position.X, GroundY, _playerCube.Position.Z);
-            _velocityY = 0f;
-            if (_isFlying && pageDown) _isFlying = false;
-        }
+        // Exit fly mode when Page Down lands us back on the floor.
+        if (_isFlying && pageDown && _playerCube.IsOnFloor())
+            _isFlying = false;
     }
 
     private void UpdateCameraRig()
