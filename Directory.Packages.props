@@ -12,6 +12,11 @@
     <!-- Physics -->
     <PackageVersion Include="JoltPhysicsSharp" Version="2.15.0" />
 
+    <!-- Godot viewer testing (via gdUnit4 inside Godot runtime) -->
+    <PackageVersion Include="gdUnit4.api" Version="5.1.0-rc1" />
+    <PackageVersion Include="gdUnit4.test.adapter" Version="3.0.0" />
+    <PackageVersion Include="gdUnit4.analyzers" Version="1.0.0" />
+
     <!-- Logging -->
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
