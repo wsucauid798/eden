@@ -14,13 +14,13 @@ Working list of concrete tasks. Ticking order is rough — phase gates are in
 - [x] `TESTING.md` rewritten for `dotnet test`
 - [x] `BUILDING.md` updated for Eden
 - [x] `README.md` stripped to essentials
-- [x] Top-level `OpenSim/` → `Eden/` directory rename
-- [x] `prebuild.xml` paths + Solution name updated
+- [x] ~~Top-level `OpenSim/` → `Eden/` directory rename~~ obsoleted at the Phase 1→2 boundary — the whole `Eden/` tree was deleted.
+- [x] ~~`prebuild.xml` paths + Solution name updated~~ obsoleted — Prebuild dropped, `prebuild.xml` gone.
 - [x] `LICENSE.md` updated to Eden + OpenSim attribution
-- [ ] Verify a clean build succeeds locally after rename (`./runprebuild.sh && dotnet build`)
+- [x] ~~Verify a clean build succeeds locally~~ `dotnet build eden.sln --configuration Release` → 0 warnings, 0 errors.
 - [ ] Verify CI passes on first push
-- [ ] Triage whether existing NUnit tests pass; mark broken ones for later
-- [ ] Decide what to do with root `eden.sln` stub (collides with Prebuild-emitted `Eden.sln`)
+- [x] ~~Triage whether existing NUnit tests pass; mark broken ones for later~~ obsoleted — the NUnit suite died with the legacy tree; new-tree suite is xUnit under `Eden.Shared.Tests/` (28 tests, 1 pre-existing flake tracked separately).
+- [x] ~~Decide what to do with root `eden.sln` stub~~ `eden.sln` is now the live solution for the new tree (5 projects).
 - [ ] Add `.github/PULL_REQUEST_TEMPLATE.md`
 - [ ] Add `.github/ISSUE_TEMPLATE/` with bug / feature / chore templates
 - [ ] Add `CODEOWNERS` file
@@ -33,77 +33,52 @@ Working list of concrete tasks. Ticking order is rough — phase gates are in
 
 ## Phase 1 — Demolition
 
-Remove the layers we're not keeping. Each item is "delete, then build to see
-what stops compiling, then delete the fallout."
+The full legacy `Eden/` tree (~2659 files, 56 MB) plus `bin/`, `ThirdParty/`,
+`ThirdPartyLicenses/`, `addon-modules/`, `share/` were deleted at the Phase
+1→2 boundary in commits `1a89a60` → `cf33e95`. Every bullet below that
+depended on that tree is now done by deletion.
 
-Every removal is paired with what replaces it in Phase 2+. Don't tick off a
-demolition line until the replacement is either (a) scheduled or (b)
-explicitly decided to be *no replacement*.
-
-- [ ] LLUDP stack — remove `Eden/Region/ClientStack/Linden/*`
-  - Replaced by: new wire protocol over Kestrel (WebSocket or WebTransport).
-  - Breaks: client connection lifecycle, packet throttling, presence heartbeats, mesh/asset streaming pipe.
-  - **Deferred to Phase 1→2 boundary.** LLClientView is the only `IClientAPI` implementation; every scene-graph callsite would need a null stub of a several-hundred-method interface to keep the build green after deletion. That stub *is* Phase 2 work. Leave the `Linden/` directory intact until Phase 2 provides the new-protocol `IClientAPI` equivalent, then delete in one move.
-- [x] ~~LSL frontend — remove LSL grammar, compiler frontend, `ll*()` function surface~~ **Done.** Deleted: `ScriptEngine/YEngine/` (53 files, ~2.9 MB), `ScriptEngine/Shared/Api/Implementation/` (entire tree incl. plugins + AsyncCommandManager), `Shared/Api/Interface/`, `Shared/Api/Runtime/`, `Shared/Tests/`, `Shared/LSL_Types.cs`. Dropped 4 projects from `prebuild.xml`. Surviving `ScriptEngine/Shared/` keeps `Helpers.cs` (DetectParams, EventParams, exception types — generic, used by Scene events) with `LSL_Types.Vector3/Quaternion` substituted by `OpenMetaverse.Vector3/Quaternion`. `ScriptEngine/Interfaces/` (IScriptModule, IScriptEngine, …) kept as scaffolding for Phase 3. String references to "YEngine" in `Scene.cs` config defaults remain — harmless, Phase 3 will replace.
-  - Still open: `bin/OpenSim.ini.example`, `bin/OpenSimDefaults.ini` config sections reference YEngine — rename / gut when we do the `bin/` config cleanup.
-  - Note: the live `Thread.Abort()` in AsyncCommandManager died with this demolition.
-- [ ] Legacy caps handlers — remove inherited caps endpoints (keep the dispatch shape for later)
-  - Replaced by: typed RPC endpoints on the new host.
-  - Breaks: inventory fetches, mesh upload, asset transfer, seed-cap handshake.
-  - **Deferred to Phase 1→2 boundary.** Caps live inside `Linden/Caps/` and are tied to the Linden protocol; go with the LLUDP cut.
-- [ ] Custom HTTP server — remove `OSHttpServer` and the custom `HttpListener.cs`
-  - Replaced by: ASP.NET Core + Kestrel (Phase 2).
-  - Breaks: all service endpoints, startup sequencing, middleware shape.
-- [ ] Mono.Addins — remove plugin-loader wiring and `.addin.xml` files
-  - Replaced by: lightweight plugin contract — interface + reflection discovery, or first-party-only with no plugin layer. Decide during Phase 2.
-  - Breaks: how region modules get discovered and loaded.
-- [ ] Nini config — remove Nini dependency and its `IConfigSource` usage
-  - Replaced by: `Microsoft.Extensions.Configuration` (Phase 2).
-  - Breaks: all `.ini` reads; config section names and hot-reload semantics change.
-- [ ] log4net — remove `ILog`-based logging calls (placeholder for Phase 2 replacement)
-  - Replaced by: `Microsoft.Extensions.Logging` with Serilog sink (Phase 2).
-  - Breaks: log output format, appender config, any external log scraping.
-- [x] ~~BinaryFormatter — delete usages in `Eden/Framework/Util.cs`~~ **Done.** `SerializeToFile` / `DeserializeFromFile` methods plus the `System.Runtime.Serialization.Formatters.Binary` using directive removed. Audit found zero callers in the codebase — pure dead code, no replacement needed.
-- [x] ~~Thread.Abort / Thread.Suspend — delete from `Util.cs`, `DoubleDictionaryThreadAbortSafe.cs`~~ **Done.** Util.cs: the `Suspend/Resume` references were all inside a dead `/*…*/` block in `Util.GetStackTrace(Thread)`; method deleted, its one caller simplified. DoubleDictionaryThreadAbortSafe.cs: renamed to `DoubleDictionary`, file renamed, `Thread.Abort`-specific comments removed, callers (EntityManager, SceneManager) qualified to disambiguate from `OpenMetaverse.DoubleDictionary`.
-  - Still open: live `Thread.Abort()` in `Eden/Region/ScriptEngine/Shared/Api/Implementation/AsyncCommandManager.cs:206` — dies with the LSL frontend demolition item.
-- [x] ~~AppDomain.CurrentDomain — delete from `Eden/Region/Application/Application.cs`~~ **No change needed.** The one live usage is `AppDomain.CurrentDomain.UnhandledException += …`, which is still the canonical (and supported) way to catch unhandled exceptions in modern .NET. Only `AppDomain.CreateDomain` and sandboxing APIs were removed, none of which we use. Other hits in the tree are commented-out code in test files.
-  - Optional follow-up: also hook `TaskScheduler.UnobservedTaskException` to catch observed-but-unhandled task exceptions (modern best practice).
-- [ ] XMLRPC and legacy grid protocols — delete with LLUDP
-  - Replaced by: new RPC protocol; no grid-interop with OpenSim grids.
-  - Breaks: any inter-grid message. Confirmed non-goal per plan.md.
-  - **Deferred to Phase 1→2 boundary.** The LLUDP research agent found XMLRPC code-wise independent from LLUDP, but protocol-wise it's the Linden login entry point. Dies with LLUDP when Phase 2's new protocol lands.
-- [ ] IAsyncResult / BeginInvoke async — mark for rewrite; delete any that were LLUDP-only
-  - Replaced by: `Task`-based async / `await`.
-  - Breaks: nothing functional — mechanical rewrite.
-  - **Deferred to Phase 2.** The LLUDP-only ones die with LLUDP. The rest (`WebUtil`, `RestObjectPoster*`, HTTP client callbacks) is a mechanical Task-based refactor that belongs with Phase 2 HTTP modernisation.
-- [x] ~~Build still succeeds with demolition merged~~ 0 errors, 0 warnings across 3 demolition commits.
-- [x] ~~Surviving scene graph still loads and runs a smoke-test region~~ Server boots, reads all configs, loads all modules without LSL/YEngine complaint, reaches interactive console init. Crashes there only because the smoke test uses non-tty stdin (captured as a separate chore). No demolition-caused regressions.
-- [x] ~~Bump `<LangVersion>` in `Directory.Build.props` from 12 back to `latest` once YEngine is demolished~~ **Done.** YEngine gone, LangVersion restored to `latest`, build clean.
-- [ ] Decision landed on sandboxing (see Open Decisions)
-- [ ] Decision landed on wire protocol (see Open Decisions)
+- [x] ~~LLUDP stack — remove `Eden/Region/ClientStack/Linden/*`~~ **Done** at Phase 1→2 boundary. Replaced by QUIC transport (`Eden.Shared` wire protocol, `System.Net.Quic`).
+- [x] ~~LSL frontend — remove LSL grammar, compiler frontend, `ll*()` function surface~~ **Done.** YEngine deleted before the boundary; the `ScriptEngine/Shared` + `ScriptEngine/Interfaces` remnants went with the boundary cut.
+- [x] ~~Legacy caps handlers — remove inherited caps endpoints~~ **Done** at Phase 1→2 boundary. `Eden/Capabilities/` deleted. Will be replaced by typed RPC endpoints on the new host when that work lands in Phase 3.
+- [x] ~~Custom HTTP server — remove `OSHttpServer` and the custom `HttpListener.cs`~~ **Done** at Phase 1→2 boundary. No HTTP in the new stack — QUIC direct via `System.Net.Quic`.
+- [x] ~~Mono.Addins — remove plugin-loader wiring and `.addin.xml` files~~ **Done** at Phase 1→2 boundary. Plugin-loader model deferred; Phase 2+ will decide if there's any plugin layer at all.
+- [x] ~~Nini config — remove Nini dependency and its `IConfigSource` usage~~ **Done** at Phase 1→2 boundary. `Microsoft.Extensions.Configuration` migration is a Phase 2 item.
+- [x] ~~log4net — remove `ILog`-based logging calls~~ **Done** at Phase 1→2 boundary. `Microsoft.Extensions.Logging` + Serilog migration is a Phase 2 item.
+- [x] ~~BinaryFormatter — delete usages in `Eden/Framework/Util.cs`~~ **Done.**
+- [x] ~~Thread.Abort / Thread.Suspend — delete from `Util.cs`, `DoubleDictionaryThreadAbortSafe.cs`~~ **Done.**
+- [x] ~~AppDomain.CurrentDomain — delete from `Eden/Region/Application/Application.cs`~~ **No change needed** (only surviving use was `UnhandledException`, still canonical in modern .NET).
+  - Optional follow-up for the new-tree `Eden.Launcher`: hook `TaskScheduler.UnobservedTaskException` to catch observed-but-unhandled task exceptions.
+- [x] ~~XMLRPC and legacy grid protocols~~ **Done** at Phase 1→2 boundary.
+- [x] ~~IAsyncResult / BeginInvoke async rewrite~~ **Done** by deletion — all Begin/End-style callsites lived in the legacy tree and went with it.
+- [x] ~~Build still succeeds with demolition merged~~ 0 errors, 0 warnings, 27/27 tests green across the 4 boundary commits.
+- [x] ~~Surviving scene graph still loads and runs a smoke-test region~~ obsoleted — there is no "surviving scene graph" anymore; Phase 3 will build a new one against the QUIC transport.
+- [x] ~~Bump `<LangVersion>` in `Directory.Build.props`~~ **Done** — `latest`.
+- [x] Decision landed on sandboxing — **trust** for MVP (see Open Decisions).
+- [x] Decision landed on wire protocol — **QUIC** (see Open Decisions).
 
 ---
 
 ## Phase 2 — Foundation
 
-- [x] ~~Create `Eden.Shared` project~~ Scaffolded at `Eden.Shared/` with `EdenVersion.cs` as anchor. Domain types will be added as wire-protocol work progresses.
+- [x] ~~Create `Eden.Shared` project~~ Scaffolded at `Eden.Shared/` with `EdenVersion.cs` as anchor.
 - [x] ~~Populate `Eden.Shared` with domain types~~ Math (`Vector3`, `Quaternion`, `Color`, `Transform`), tagged IDs (`EdenId<TTag>`), entities (`AvatarState`, `PrimState`), wire envelope + `ClientHello`/`ServerHello`/`Ping`/`Pong`/`AvatarUpdate`/`AvatarLeft`/`PrimUpdate`/`ChatMessage`. 6 round-trip tests green.
-- [ ] Move domain types from surviving `Eden/Framework` into `Eden.Shared` — not needed; Eden.Shared is a fresh model, legacy `Eden/Framework` gets deleted with the rest of the Linden stack at the Phase 1→2 boundary.
-- [x] ~~Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server~~ Decided against — went direct QUIC via `System.Net.Quic` (`EdenLauncher.StartHostAsync`). No HTTP layer in the runtime.
+- [x] ~~Move domain types from surviving `Eden/Framework` into `Eden.Shared`~~ obsoleted at the Phase 1→2 boundary — `Eden/Framework` is gone, `Eden.Shared` is the authoritative model.
+- [x] ~~Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server~~ Went direct QUIC via `System.Net.Quic` (`EdenLauncher.StartHostAsync`). No HTTP layer in the runtime.
 - [x] ~~Implement wire protocol transport (server side) — QUIC via `System.Net.Quic`~~ `QuicTransport` + `InMemoryTransport` both implement `ITransport`. Multi-client server (`EdenServer.HandleClientAsync`) with avatar registry + broadcast. `QuicHostIntegrationTests` exercises real QUIC end-to-end.
 - [ ] Register custom MessagePack formatters for the `Eden.Shared` domain types (index-keyed, not property-name-keyed) — brings typical `AvatarState` from ~250 B down to ~100 B without polluting records with `[Key]` attributes
 - [ ] Replace config layer with `Microsoft.Extensions.Configuration`
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
-- [ ] Migrate MySQL.Data to MySqlConnector
-- [ ] Replace `System.Drawing.Common` + `libgdiplus` with `SkiaSharp` (or `ImageSharp`) — drops the only native-library install step on Linux/macOS
-- [ ] Replace `Mono.Data.Sqlite` with `Microsoft.Data.Sqlite` (modern, maintained)
-- [ ] Audit `Mono.Cecil` usage — likely only Mono.Addins internals; should die with the Mono.Addins removal
-- [x] ~~Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`~~ Prebuild removed; all csproj files tracked as SDK-style, solution `Eden.sln` tracked. Central package management (`Directory.Packages.props`) deferred until HintPath refs are converted to PackageReferences.
+- [ ] Migrate MySQL.Data to MySqlConnector — deferred until a database layer actually lands in the new tree
+- [ ] Replace `System.Drawing.Common` + `libgdiplus` with `SkiaSharp` (or `ImageSharp`) — deferred until image-handling actually lands in the new tree (the legacy callsites went with the Phase 1→2 cut)
+- [ ] Replace `Mono.Data.Sqlite` with `Microsoft.Data.Sqlite` — deferred until SQLite callsites appear in the new tree
+- [x] ~~Audit `Mono.Cecil` usage~~ died with Mono.Addins / legacy tree.
+- [x] ~~Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`~~ Prebuild removed; all csproj files tracked as SDK-style, solution `eden.sln` tracked. Central package management deferred (own bullet below).
 - [x] ~~Bump target framework `net8_0` → `net10_0`~~ Done across all csproj files; `global.json` pins SDK to 10.0.100+.
-- [x] ~~Pin monorepo layout~~ Settled: `Eden.Shared` / `Eden.Client` / `Eden.Server.Core` / `Eden.Launcher` / `Eden.Viewer` at repo root; the legacy `Eden/` tree is Phase-1 survivors awaiting Phase 2 deletion.
+- [x] ~~Pin monorepo layout~~ `Eden.Shared` / `Eden.Client` / `Eden.Server.Core` / `Eden.Launcher` / `Eden.Viewer` at repo root. Legacy `Eden/` tree gone.
 - [ ] Decide central package management (`Directory.Packages.props`) vs per-project `PackageReference` — currently per-project
 - [ ] Pick DI container — default to `Microsoft.Extensions.DependencyInjection` unless reason not to
-- [x] ~~Define wire protocol versioning scheme from day 1~~ `EdenVersion.WireProtocol` constant shipped in `ClientHello`/`ServerHello`; server rejects mismatched versions. Path-based `/v1/…` N/A (QUIC, not HTTP).
+- [x] ~~Define wire protocol versioning scheme from day 1~~ `EdenVersion.WireProtocol` constant shipped in `ClientHello`/`ServerHello`; server rejects mismatched versions.
 - [ ] Add health-check / liveness endpoint to the server host
 
 ---
@@ -115,7 +90,7 @@ explicitly decided to be *no replacement*.
 - [ ] Roslyn-based script host; trust-model sandbox initially
 - [ ] Physics re-integration against Bullet
 - [ ] Asset / inventory / user services exposed over new wire protocol
-- [x] ~~Integration tests that spin up a server and hit endpoints~~ `Eden.Shared.Tests` covers handshake, multi-client avatar registry, broadcast + spoof-guard, QUIC end-to-end, ViewerClient mirror. 28 tests green.
+- [x] ~~Integration tests that spin up a server and hit endpoints~~ `Eden.Shared.Tests` covers handshake, multi-client avatar registry, broadcast + spoof-guard, QUIC end-to-end, ViewerClient mirror. 28 tests (1 pre-existing flake tracked separately).
 - [ ] Lock the scripting API shape with a worked sample in `_docs/_design/` (`async Task OnTouch(Avatar who)`, etc.)
 - [ ] Enumerate the script event surface (touch, collision, timer, money, sensor, link_message, …)
 - [ ] Choose region persistence format (JSON, custom binary, SQLite rows)
@@ -166,22 +141,6 @@ explicitly decided to be *no replacement*.
 
 ---
 
-## Deferred from earlier passes
-
-Items explicitly punted during Phase 0 / Option-C rename. Execute
-post-demolition.
-
-- [ ] Namespace rename — `namespace OpenSim.*` to `namespace Eden.*` across all `.cs` files
-- [ ] Using rename — `using OpenSim.*;` to `using Eden.*;`
-- [ ] Project / assembly names in `prebuild.xml` — `<Project name="OpenSim.X">` to `<Project name="Eden.X">` (plus all `<Reference name="OpenSim.X"/>`)
-- [ ] Binary output names — `OpenSim.exe` to `Eden.exe`, `OpenSim.ConsoleClient.exe` to `Eden.ConsoleClient.exe`
-- [ ] Runtime config files — `bin/OpenSim.ini.example`, `bin/OpenSim.exe.config`, `bin/OpenSimDefaults.ini`, etc.
-- [ ] Launcher scripts — `bin/opensim.sh` to `bin/eden.sh`
-- [ ] Source-file copyright headers — audit for correctness; keep OpenSim attributions per BSD terms, add Eden notice to new files
-- [ ] Warning suppressions in `prebuild.xml` — `CA1416`, `SYSLIB0011`, `SYSLIB0014`, `SYSLIB0039` should be removable once the dangerous APIs are gone
-
----
-
 ## Open decisions
 
 *All closed 2026-04-19. See [plan.md](../_design/plan.md) decision log for outcomes.*
@@ -199,6 +158,7 @@ post-demolition.
 - [ ] Container image + `docker-compose.yml` for quick local runs
 - [ ] Performance baseline / benchmark harness
 - [ ] Load test rig (simulated avatar bot pool)
+- [ ] Fix pre-existing flake `ViewerClientTests.Remote_Movement_Populates_RemoteAvatars` (spun off as side task at the Phase 1→2 boundary)
 
 ---
 
@@ -214,10 +174,5 @@ post-demolition.
 
 ## Chores (anytime)
 
-- [ ] Delete `bin/Regions/`, `bin/ScriptEngines/`, `bin/*.db`, `bin/*.log` from the committed tree if any slipped in
-- [ ] Audit `ThirdParty/` — which vendored libs are actually used after demolition?
-- [ ] Move root `eden.sln` (Prebuild-only stub) under `Prebuild/` if keeping, else delete
-- [ ] Scrub dead NAnt references (old `.nant/` folders, etc.) if any remain
-- [ ] Rename `Watchdog.AbortThread` (in `Eden/Framework/Monitoring/Watchdog.cs`) — it no longer aborts, just untracks. Convert callers to cooperative cancellation at the same time.
-- [ ] Fix silent cert-missing failure in `Eden/Server/Base/HttpServerBase.cs` — prints "server can't start" then keeps going. Should `Environment.Exit(1)` or throw.
-- [ ] Make `LocalConsole` tolerate non-tty stdin — currently crashes at `Console.TreatControlCAsInput = true` when launched without an interactive terminal (scripts, Docker, CI). Try/catch or detect `Console.IsInputRedirected` first.
+- [ ] Audit new-tree `Eden.*` source files for correct copyright headers (BSD attribution for derivative content; plain Eden header on net-new files)
+- [ ] Remove `CA1416` suppression in `Directory.Build.props` once the QUIC cross-platform story is verified on all three OSes
