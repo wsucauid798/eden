@@ -176,6 +176,16 @@ public partial class Main : Node3D
         // Own label displays the name immediately; movement fires real updates.
         if (_playerLabel is not null) _playerLabel.Text = _displayName;
 
+        // Tint the local cube with the colour derived from our UserId so it
+        // matches what every other viewer will see us as.
+        if (_playerCube is not null)
+        {
+            _playerCube.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+            {
+                AlbedoColor = ColorForUser(_client.MyUserId),
+            });
+        }
+
         await SendCurrentPoseAsync();
         Input.MouseMode = Input.MouseModeEnum.Captured;
     }
@@ -245,7 +255,9 @@ public partial class Main : Node3D
         // A few reference props so the world isn't two cubes in a void.
         BuildReferenceProps();
 
-        // Player — blue cube + billboarded name label.
+        // Player cube — colour derived from our server-assigned UserId in
+        // StartAsync so every viewer sees us in the same colour. Neutral
+        // grey until then.
         _playerCube = new MeshInstance3D
         {
             Mesh     = new BoxMesh { Size = Vector3.One },
@@ -253,7 +265,7 @@ public partial class Main : Node3D
         };
         _playerCube.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.30f, 0.60f, 0.95f),
+            AlbedoColor = new Color(0.55f, 0.55f, 0.60f),
         });
         AddChild(_playerCube);
 
@@ -358,6 +370,21 @@ public partial class Main : Node3D
             Roughness   = 0.4f,
         });
         AddChild(sphereB);
+    }
+
+    /// <summary>Deterministic colour from a <see cref="EdenId{UserTag}"/>.
+    /// Same user id → same colour on every viewer, so an avatar's
+    /// appearance is a property of who you are, not of whose screen
+    /// you're rendered on.</summary>
+    private static Color ColorForUser(EdenId<UserTag> userId)
+    {
+        // 16 hash bytes of the Guid → stable hue; fixed S/V for readability.
+        Span<byte> bytes = stackalloc byte[16];
+        userId.Value.TryWriteBytes(bytes);
+        var h = 0u;
+        foreach (var b in bytes) h = h * 31u + b;
+        var hue = (h & 0xFFFFu) / (float)0xFFFFu;
+        return Color.FromHsv(hue, 0.65f, 0.88f);
     }
 
     private static Label3D BuildNameLabel(string text) => new Label3D
@@ -471,7 +498,7 @@ public partial class Main : Node3D
             var cube = new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One } };
             cube.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.95f, 0.55f, 0.20f),
+                AlbedoColor = ColorForUser(state.UserId),
             });
             AddChild(cube);
 
