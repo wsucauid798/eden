@@ -22,7 +22,7 @@ Useful options:
 
 ```sh
 # Run tests in a single project
-dotnet test Eden.Shared.Tests/Eden.Shared.Tests.csproj
+dotnet test tests/Eden.Tests/Eden.Tests.csproj
 
 # Run a single test by name pattern
 dotnet test --filter "FullyQualifiedName~ViewerClient"
@@ -31,13 +31,16 @@ dotnet test --filter "FullyQualifiedName~ViewerClient"
 dotnet test --logger "console;verbosity=detailed"
 ```
 
-## Adding tests
+## Layout
 
-- Tests do not belong in production assemblies. Put them in a parallel project
-  named after the assembly under test, suffixed with `.Tests` — e.g.
-  `Eden.Shared.Tests` alongside `Eden.Shared`.
-- If you add a new test project, add it to [eden.sln](eden.sln) so it gets
-  picked up by `dotnet build` / `dotnet test`.
+- Product code lives under `src/` (one project per directory).
+- Test code lives under `tests/` — currently one project, `Eden.Tests/`,
+  covering every `src/` project.
+- If a single test project becomes unwieldy, split it by the source project
+  it targets (`tests/Eden.Scripting.Tests/`, etc.). Today's scale doesn't
+  justify the split.
+- New test projects need to be added to [eden.sln](eden.sln) so `dotnet build`
+  / `dotnet test` pick them up.
 
 ## IDE integration
 

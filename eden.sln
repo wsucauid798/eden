@@ -1,21 +1,21 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 22
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Shared", "Eden.Shared\Eden.Shared.csproj", "{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Shared", "src\Eden.Shared\Eden.Shared.csproj", "{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Shared.Tests", "Eden.Shared.Tests\Eden.Shared.Tests.csproj", "{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Tests", "tests\Eden.Tests\Eden.Tests.csproj", "{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Server.Core", "Eden.Server.Core\Eden.Server.Core.csproj", "{39B9BCAB-6324-4366-8B5F-0FF356CF7995}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Server", "src\Eden.Server\Eden.Server.csproj", "{39B9BCAB-6324-4366-8B5F-0FF356CF7995}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Launcher", "Eden.Launcher\Eden.Launcher.csproj", "{CDEDBD26-144C-4DE3-94B5-332C41A12FDA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Launcher", "src\Eden.Launcher\Eden.Launcher.csproj", "{CDEDBD26-144C-4DE3-94B5-332C41A12FDA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Client", "Eden.Client\Eden.Client.csproj", "{A539115E-02E4-4F50-8F9A-B8AD7A5A39A5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Client", "src\Eden.Client\Eden.Client.csproj", "{A539115E-02E4-4F50-8F9A-B8AD7A5A39A5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Logging", "Eden.Logging\Eden.Logging.csproj", "{EF92558D-B8B0-4EC3-9262-FCF65934052C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Logging", "src\Eden.Logging\Eden.Logging.csproj", "{EF92558D-B8B0-4EC3-9262-FCF65934052C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting", "Eden.Scripting\Eden.Scripting.csproj", "{3A784143-1611-40C4-8555-2ED236DE8AB6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting", "src\Eden.Scripting\Eden.Scripting.csproj", "{3A784143-1611-40C4-8555-2ED236DE8AB6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting.Host", "Eden.Scripting.Host\Eden.Scripting.Host.csproj", "{ACC107DE-B08D-4E25-917B-EEA57D2246EC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting.Host", "src\Eden.Scripting\Host\Eden.Scripting.Host.csproj", "{ACC107DE-B08D-4E25-917B-EEA57D2246EC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

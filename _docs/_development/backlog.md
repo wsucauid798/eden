@@ -19,7 +19,7 @@ Working list of concrete tasks. Ticking order is rough — phase gates are in
 - [x] `LICENSE.md` updated to Eden + OpenSim attribution
 - [x] ~~Verify a clean build succeeds locally~~ `dotnet build eden.sln --configuration Release` → 0 warnings, 0 errors.
 - [ ] Verify CI passes on first push
-- [x] ~~Triage whether existing NUnit tests pass; mark broken ones for later~~ obsoleted — the NUnit suite died with the legacy tree; new-tree suite is xUnit under `Eden.Shared.Tests/` (28 tests, 1 pre-existing flake tracked separately).
+- [x] ~~Triage whether existing NUnit tests pass; mark broken ones for later~~ obsoleted — the NUnit suite died with the legacy tree; new-tree suite is xUnit under `tests/Eden.Tests/` (28 tests, 1 pre-existing flake tracked separately).
 - [x] ~~Decide what to do with root `eden.sln` stub~~ `eden.sln` is now the live solution for the new tree (5 projects).
 - [ ] Add `.github/PULL_REQUEST_TEMPLATE.md`
 - [ ] Add `.github/ISSUE_TEMPLATE/` with bug / feature / chore templates
@@ -75,7 +75,7 @@ depended on that tree is now done by deletion.
 - [x] ~~Audit `Mono.Cecil` usage~~ died with Mono.Addins / legacy tree.
 - [x] ~~Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`~~ Prebuild removed; all csproj files tracked as SDK-style, solution `eden.sln` tracked. Central package management deferred (own bullet below).
 - [x] ~~Bump target framework `net8_0` → `net10_0`~~ Done across all csproj files; `global.json` pins SDK to 10.0.100+.
-- [x] ~~Pin monorepo layout~~ `Eden.Shared` / `Eden.Client` / `Eden.Server.Core` / `Eden.Launcher` / `Eden.Viewer` at repo root. Legacy `Eden/` tree gone.
+- [x] ~~Pin monorepo layout~~ `src/` + `tests/` split. Product under `src/` (`Eden.Shared`, `Eden.Server`, `Eden.Client`, `Eden.Launcher`, `Eden.Logging`, `Eden.Scripting` with nested `Host/`, `Eden.Viewer`); `tests/Eden.Tests/` covers everything.
 - [x] ~~Decide central package management~~ Adopted `Directory.Packages.props` at repo root. `CentralPackageTransitivePinningEnabled=true`. All 11 package versions live in one file; csproj files just `<PackageReference Include="…" />`.
 - [x] ~~Pick DI container~~ `Microsoft.Extensions.DependencyInjection`. `Eden.Logging.AddEdenLogging(this IServiceCollection, ...)` extension wires Serilog through the standard `ILoggerFactory`/`ILogger<T>` graph. Composition roots (viewer, future CLI, tests) build a `ServiceProvider` and resolve normally.
 - [x] ~~Define wire protocol versioning scheme from day 1~~ `EdenVersion.WireProtocol` constant shipped in `ClientHello`/`ServerHello`; server rejects mismatched versions.
@@ -86,12 +86,12 @@ depended on that tree is now done by deletion.
 ## Phase 3 — Server rebuild
 
 - [ ] Scene graph running against new transport — partial: server has a prim registry (`EdenServer._prims`), `SpawnPrimWithBehaviorAsync` attaches a behavior, `ClientTouchPrim` wire frame dispatches `[OnTouch]` onto the prim's behavior via `ServerSelfContext`. Full scene graph (children, parenting, visibility, prim broadcasts) is still TODO.
-- [x] ~~C# scripting API surface~~ `Eden.Scripting` — `EdenBehavior` + event/capability attributes + context interfaces. Samples in `Eden.Shared.Tests/ScriptingSamplesCompileTest.cs` are a compile-check.
+- [x] ~~C# scripting API surface~~ `Eden.Scripting` — `EdenBehavior` + event/capability attributes + context interfaces. Samples in `tests/Eden.Tests/ScriptingSamplesCompileTest.cs` are a compile-check.
 - [x] ~~Roslyn-based script host; trust-model sandbox initially~~ `Eden.Scripting.Host.BehaviorHost` — pre-compiled assembly loading (Roslyn-from-source deferred), reflection-based handler dispatch, lifecycle, error isolation. 10 host tests + DoorScript end-to-end integration. Trust model only; sandboxing deferred to Phase 6. `[OnChat(Channel=…)]` filter dispatch shipped — `RaiseChatAsync(…, channel)` convenience.
 - [ ] Physics integration against **Jolt** (via `JoltPhysicsSharp`) — **slice 1 shipped**: `PhysicsWorld` wrapper, 60 Hz server tick loop, box bodies sized by prim scale, static vs dynamic via `PrimFlags.Physical`, dynamic-body pose synced back to `ServerPrim` and broadcast as `PrimUpdate`. Gravity test green. Still TODO: collision event dispatch → `[OnCollisionStart/End]`, wire `IPhysicsApi.Raycast` to Jolt, non-box shapes, avatar character controllers.
 - [ ] Asset / inventory / user services exposed over new wire protocol
-- [x] ~~Integration tests that spin up a server and hit endpoints~~ `Eden.Shared.Tests` covers handshake, multi-client avatar registry, broadcast + spoof-guard, QUIC end-to-end, ViewerClient mirror. 28 tests (1 pre-existing flake tracked separately).
-- [x] ~~Lock the scripting API shape with a worked sample in `_docs/_design/`~~ Design doc at `_docs/_design/scripting-model.md`; scaffolded `Eden.Scripting/` project with `EdenBehavior` + event/capability attributes + `ISelfContext`/`IWorldContext`. Sample behaviors (`DoorScript`, `VendingMachine`, `SerialDemo`) in `Eden.Shared.Tests/ScriptingSamplesCompileTest.cs` are a compile-check of the API — if the shape drifts, the build breaks.
+- [x] ~~Integration tests that spin up a server and hit endpoints~~ `Eden.Tests` covers handshake, multi-client avatar registry, broadcast + spoof-guard, QUIC end-to-end, ViewerClient mirror. 28 tests (1 pre-existing flake tracked separately).
+- [x] ~~Lock the scripting API shape with a worked sample in `_docs/_design/`~~ Design doc at `_docs/_design/scripting-model.md`; scaffolded `Eden.Scripting/` project with `EdenBehavior` + event/capability attributes + `ISelfContext`/`IWorldContext`. Sample behaviors (`DoorScript`, `VendingMachine`, `SerialDemo`) in `tests/Eden.Tests/ScriptingSamplesCompileTest.cs` are a compile-check of the API — if the shape drifts, the build breaks.
 - [ ] Enumerate the script event surface (touch, collision, timer, money, sensor, link_message, …)
 - [ ] Choose region persistence format (JSON, custom binary, SQLite rows)
 
