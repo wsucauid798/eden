@@ -11,6 +11,8 @@ namespace Eden.Scripting.Host;
 public sealed class BehaviorHandle : IAsyncDisposable
 {
     private readonly BehaviorHost _host;
+    private readonly CancellationTokenSource _timerCts = new();
+    private List<Task>? _timerTasks;
     private int _disposed;
 
     public EdenBehavior Behavior { get; }
@@ -19,6 +21,11 @@ public sealed class BehaviorHandle : IAsyncDisposable
 
     /// <summary>Non-null when the behavior opted into <c>[SerializeHandlers]</c>.</summary>
     internal SemaphoreSlim? Gate { get; }
+
+    /// <summary>Cancelled when the handle is disposed — used to tear down
+    /// every <see cref="OnTimerAttribute"/> / <see cref="OnTickAttribute"/>
+    /// loop this behavior started.</summary>
+    internal CancellationToken TimerToken => _timerCts.Token;
 
     internal BehaviorHandle(
         BehaviorHost        host,
@@ -32,6 +39,8 @@ public sealed class BehaviorHandle : IAsyncDisposable
         Log         = log;
         Gate        = descriptor.SerializeHandlers ? new SemaphoreSlim(1, 1) : null;
     }
+
+    internal void RegisterTimers(List<Task> tasks) => _timerTasks = tasks;
 
     /// <summary>Fire matching handlers on <em>this</em> behavior only. Used
     /// when an event targets a specific behavior (e.g. the prim that was
@@ -52,6 +61,16 @@ public sealed class BehaviorHandle : IAsyncDisposable
 
         _host.Detach(this);
 
+        // Cancel every [OnTimer]/[OnTick] loop and wait for them to exit
+        // before we call OnDisable — guarantees no tick fires after disable.
+        _timerCts.Cancel();
+        if (_timerTasks is not null)
+        {
+            try { await Task.WhenAll(_timerTasks).ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* expected */ }
+            catch (Exception ex) { Log.LogWarning(ex, "Timer loop threw on shutdown"); }
+        }
+
         try
         {
             var task = (Task)Descriptor.OnDisableMethod.Invoke(Behavior, null)!;
@@ -68,5 +87,6 @@ public sealed class BehaviorHandle : IAsyncDisposable
         }
 
         Gate?.Dispose();
+        _timerCts.Dispose();
     }
 }

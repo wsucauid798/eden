@@ -70,7 +70,71 @@ public sealed class BehaviorHost
                 behavior.GetType().Name);
         }
 
+        handle.RegisterTimers(StartTimerLoops(handle));
         return handle;
+    }
+
+    private static List<Task> StartTimerLoops(BehaviorHandle handle)
+    {
+        var tasks = new List<Task>();
+        foreach (var (attrType, bindings) in handle.Descriptor.Handlers)
+        {
+            foreach (var binding in bindings)
+            {
+                switch (binding.Attribute)
+                {
+                    case OnTimerAttribute t:
+                        tasks.Add(RunTimerLoopAsync(handle, binding, t.Seconds, passDelta: false, handle.TimerToken));
+                        break;
+                    case OnTickAttribute tick:
+                        tasks.Add(RunTimerLoopAsync(handle, binding, tick.Seconds, passDelta: true, handle.TimerToken));
+                        break;
+                }
+            }
+        }
+        return tasks;
+    }
+
+    private static async Task RunTimerLoopAsync(
+        BehaviorHandle     handle,
+        HandlerBinding     binding,
+        double             seconds,
+        bool               passDelta,
+        CancellationToken  ct)
+    {
+        if (seconds <= 0) return;
+
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(seconds));
+        var lastTick = DateTime.UtcNow;
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+            {
+                object[] args;
+                if (passDelta)
+                {
+                    var now = DateTime.UtcNow;
+                    args = [now - lastTick];
+                    lastTick = now;
+                }
+                else
+                {
+                    args = [];
+                }
+
+                // Match by attribute-instance reference so other handlers for
+                // the same event type (e.g. another [OnTimer(5)] method) do
+                // not fire on this timer's tick.
+                await BehaviorDispatch.InvokeAsync(
+                    handle,
+                    binding.Attribute.GetType(),
+                    args,
+                    filter: attr => ReferenceEquals(attr, binding.Attribute),
+                    ct).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) { /* disposal */ }
     }
 
     /// <summary>Fire every matching handler on every attached behavior.
