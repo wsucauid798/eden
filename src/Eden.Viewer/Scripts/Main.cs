@@ -29,9 +29,17 @@ namespace Eden.Viewer;
 public partial class Main : Node3D
 {
     private const float  MoveSpeed        = 5f;
+    private const float  SprintMultiplier = 1.8f;
+    private const float  JumpVelocity     = 6f;
+    private const float  Gravity          = 18f;
+    private const float  FlySpeed         = 6f;
+    private const float  GroundY          = 0.5f;
     private const float  MouseSensitivity = 0.003f;
     private const float  CameraDistance   = 6f;
     private const float  CameraHeight     = 2.2f;
+    private const float  MinCameraDistance = 1.5f;
+    private const float  MaxCameraDistance = 20f;
+    private const float  ZoomStep         = 0.6f;
     private const double SendHz           = 20.0;
     private const int    DefaultPort      = 5001;
     private readonly double _sendInterval = 1.0 / SendHz;
@@ -45,10 +53,15 @@ public partial class Main : Node3D
     private Node3D?         _cameraRig;
     private Node3D?         _yawPivot;
     private Node3D?         _pitchPivot;
+    private Camera3D?       _camera;
     private Label?          _menuLabel;
     private Label?          _hudLabel;
     private WorldRenderer?  _world;
     private PrimRenderer?   _prims;
+
+    private float _cameraDistance = CameraDistance;
+    private float _velocityY;
+    private bool  _isFlying;
 
     private readonly Dictionary<EdenId<UserTag>, RemoteAvatar> _remote          = new();
     private readonly ConcurrentQueue<AvatarState>              _pendingUpdates  = new();
@@ -111,10 +124,54 @@ public partial class Main : Node3D
                     : Input.MouseModeEnum.Captured;
                 break;
 
-            case InputEventMouseButton { Pressed: true } when Input.MouseMode == Input.MouseModeEnum.Visible:
-                Input.MouseMode = Input.MouseModeEnum.Captured;
+            case InputEventMouseButton { Pressed: true } mb:
+                switch (mb.ButtonIndex)
+                {
+                    case MouseButton.WheelUp:
+                        _cameraDistance = Mathf.Max(MinCameraDistance, _cameraDistance - ZoomStep);
+                        UpdateCameraOffset();
+                        break;
+                    case MouseButton.WheelDown:
+                        _cameraDistance = Mathf.Min(MaxCameraDistance, _cameraDistance + ZoomStep);
+                        UpdateCameraOffset();
+                        break;
+                    case MouseButton.Left when Input.MouseMode == Input.MouseModeEnum.Captured:
+                        await TryClickTouchAsync();
+                        break;
+                    default:
+                        if (Input.MouseMode == Input.MouseModeEnum.Visible)
+                            Input.MouseMode = Input.MouseModeEnum.Captured;
+                        break;
+                }
                 break;
         }
+    }
+
+    private void UpdateCameraOffset()
+    {
+        if (_camera is not null)
+            _camera.Position = new Vector3(0f, CameraHeight, _cameraDistance);
+    }
+
+    private async Task TryClickTouchAsync()
+    {
+        if (_client is null || _camera is null) return;
+
+        var vp = GetViewport();
+        var center = vp.GetVisibleRect().Size / 2f;
+        var rayOrigin = _camera.ProjectRayOrigin(center);
+        var rayEnd    = rayOrigin + _camera.ProjectRayNormal(center) * 200f;
+
+        var space = _camera.GetWorld3D().DirectSpaceState;
+        var query = PhysicsRayQueryParameters3D.Create(rayOrigin, rayEnd);
+        var hit = space.IntersectRay(query);
+        if (hit.Count == 0) return;
+
+        if (hit["collider"].AsGodotObject() is not Node body) return;
+        var primIdStr = body.GetMeta("prim_id", "").AsString();
+        if (string.IsNullOrEmpty(primIdStr) || !Guid.TryParse(primIdStr, out var g)) return;
+
+        await _client.TouchPrimAsync(new EdenId<PrimTag>(g));
     }
 
     public override void _Process(double delta)
@@ -277,13 +334,13 @@ public partial class Main : Node3D
         _cameraRig  = new Node3D();
         _yawPivot   = new Node3D();
         _pitchPivot = new Node3D { Rotation = new Vector3(_pitch, 0, 0) };
-        var camera  = new Camera3D { Position = new Vector3(0f, CameraHeight, CameraDistance) };
+        _camera     = new Camera3D { Position = new Vector3(0f, CameraHeight, _cameraDistance) };
 
         AddChild(_cameraRig);
         _cameraRig.AddChild(_yawPivot);
         _yawPivot.AddChild(_pitchPivot);
-        _pitchPivot.AddChild(camera);
-        camera.LookAt(_cameraRig.GlobalPosition + Vector3.Up * 0.8f, Vector3.Up);
+        _pitchPivot.AddChild(_camera);
+        _camera.LookAt(_cameraRig.GlobalPosition + Vector3.Up * 0.8f, Vector3.Up);
     }
 
     /// <summary>Bake a checker-pattern texture at runtime. `size` is pixels
@@ -420,22 +477,63 @@ public partial class Main : Node3D
     private void HandleMovement(double delta)
     {
         if (_playerCube is null) return;
+        var dt = (float)delta;
 
-        var input = new Vector3(
-            x: (Input.IsKeyPressed(Key.D) ? 1f : 0f) - (Input.IsKeyPressed(Key.A) ? 1f : 0f),
-            y: 0f,
-            z: (Input.IsKeyPressed(Key.S) ? 1f : 0f) - (Input.IsKeyPressed(Key.W) ? 1f : 0f));
+        // Horizontal — WASD and arrow keys both move, yaw-relative.
+        var fwd   = (Input.IsKeyPressed(Key.W) || Input.IsKeyPressed(Key.Up))    ? 1f : 0f;
+        var back  = (Input.IsKeyPressed(Key.S) || Input.IsKeyPressed(Key.Down))  ? 1f : 0f;
+        var right = (Input.IsKeyPressed(Key.D) || Input.IsKeyPressed(Key.Right)) ? 1f : 0f;
+        var left  = (Input.IsKeyPressed(Key.A) || Input.IsKeyPressed(Key.Left))  ? 1f : 0f;
+        var input = new Vector3(right - left, 0f, back - fwd);
 
-        if (input == Vector3.Zero) return;
+        var speed = MoveSpeed;
+        if (Input.IsKeyPressed(Key.Shift)) speed *= SprintMultiplier;
 
-        // Move in the plane, relative to camera yaw.
-        var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
-        var worldDir = (yawBasis * input.Normalized()).Normalized();
-        _playerCube.Position += worldDir * MoveSpeed * (float)delta;
+        if (input != Vector3.Zero)
+        {
+            var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
+            var worldDir = (yawBasis * input.Normalized()).Normalized();
+            _playerCube.Position += worldDir * speed * dt;
+            _playerCube.Rotation = new Vector3(0f, Mathf.Atan2(-worldDir.X, -worldDir.Z), 0f);
+        }
 
-        // Face movement direction.
-        _playerCube.Rotation = new Vector3(
-            0f, Mathf.Atan2(-worldDir.X, -worldDir.Z), 0f);
+        // Vertical — fly while Page Up/Down held, otherwise gravity + Space jump.
+        var pageUp   = Input.IsKeyPressed(Key.Pageup);
+        var pageDown = Input.IsKeyPressed(Key.Pagedown);
+
+        if (pageUp)
+        {
+            _isFlying  = true;
+            _velocityY = FlySpeed;
+        }
+        else if (_isFlying && pageDown)
+        {
+            _velocityY = -FlySpeed;
+        }
+        else if (_isFlying)
+        {
+            _velocityY = 0f;            // hover
+        }
+        else
+        {
+            var grounded = _playerCube.Position.Y <= GroundY + 0.001f && _velocityY <= 0f;
+            _velocityY = grounded && Input.IsKeyPressed(Key.Space)
+                ? JumpVelocity
+                : _velocityY - Gravity * dt;
+        }
+
+        _playerCube.Position = new Vector3(
+            _playerCube.Position.X,
+            _playerCube.Position.Y + _velocityY * dt,
+            _playerCube.Position.Z);
+
+        // Ground clamp and fly-mode exit.
+        if (_playerCube.Position.Y < GroundY)
+        {
+            _playerCube.Position = new Vector3(_playerCube.Position.X, GroundY, _playerCube.Position.Z);
+            _velocityY = 0f;
+            if (_isFlying && pageDown) _isFlying = false;
+        }
     }
 
     private void UpdateCameraRig()

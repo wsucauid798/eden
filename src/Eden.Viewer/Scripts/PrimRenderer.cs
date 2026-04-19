@@ -47,6 +47,16 @@ public partial class PrimRenderer : Node3D
         {
             mesh = new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One } };
             AddChild(mesh);
+
+            // Pick collider — a StaticBody3D with a BoxShape matching the
+            // mesh scale. Carries the prim id as metadata so crosshair
+            // raycasts in Main can map the hit back to a TouchPrim call.
+            var body = new StaticBody3D();
+            var shape = new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } };
+            body.AddChild(shape);
+            mesh.AddChild(body);
+            body.SetMeta("prim_id", state.Id.Value.ToString("N"));
+
             _meshes[state.Id] = mesh;
         }
 
