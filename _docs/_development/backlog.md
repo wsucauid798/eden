@@ -94,6 +94,8 @@ explicitly decided to be *no replacement*.
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
 - [ ] Migrate MySQL.Data to MySqlConnector
 - [ ] Drop Prebuild tool; convert to native `.csproj` files + `Directory.Packages.props`
+- [ ] Bump target framework `net8_0` → `net10_0` in `prebuild.xml` (or in the new `.csproj` files after Prebuild is dropped); verify QUIC / WebTransport support
+- [ ] Stand up `System.Net.Quic` + WebTransport over Kestrel as the wire transport
 - [ ] Pin monorepo layout — where `Eden.Shared`, `Eden.Server`, `Eden.Viewer` live relative to the surviving `Eden/` tree
 - [ ] Decide central package management (`Directory.Packages.props`) vs per-project `PackageReference`
 - [ ] Pick DI container — default to `Microsoft.Extensions.DependencyInjection` unless reason not to
@@ -178,11 +180,11 @@ post-demolition.
 
 ## Open decisions
 
-These gate Phase 2. See [plan.md](../_design/plan.md) for context.
+*All closed 2026-04-19. See [plan.md](../_design/plan.md) decision log for outcomes.*
 
-- [ ] Script sandboxing model — trust / process isolation / WASM
-- [ ] Wire protocol — WebSocket+MessagePack vs WebTransport/QUIC
-- [ ] Content portability — fresh start vs import converters
+- [x] Script sandboxing model — **trust** for MVP; keep host abstraction WASM-compatible
+- [x] Wire protocol — **WebTransport over QUIC** (`System.Net.Quic`), MessagePack payloads
+- [x] Content portability — **fresh start**; no OpenSim migration tooling baked in
 
 ---
 
