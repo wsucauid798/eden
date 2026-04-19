@@ -134,6 +134,11 @@ public sealed class EdenServer
                         await OnClientTouchPrim(session, touch, ct);
                         break;
 
+                    case MessageKind.ChatMessage when session is not null:
+                        var chat = Envelope.DecodePayload<ChatMessage>(frame.Value);
+                        await OnChatMessage(session, chat, ct);
+                        break;
+
                     default:
                         _logger.LogDebug("Ignoring frame of kind {Kind} on session {SessionId}",
                             kind, session?.Id);
@@ -238,6 +243,25 @@ public sealed class EdenServer
         await BroadcastExceptAsync(sessionId, MessageKind.AvatarUpdate, new AvatarUpdate(initialAvatar), ct);
 
         return session;
+    }
+
+    private async Task OnChatMessage(ClientSession session, ChatMessage chat, CancellationToken ct)
+    {
+        // Normalise: server-authoritative From; don't trust the client's field.
+        var normalised = chat with { From = session.UserId };
+
+        // 1) Broadcast to every connected viewer (including the sender, so the
+        //    sender can render their own bubble from the same wire event).
+        await BroadcastAsync(MessageKind.ChatMessage, normalised, ct).ConfigureAwait(false);
+
+        // 2) Dispatch to every attached behavior with a matching [OnChat(Channel=)].
+        var state  = _avatars.GetValueOrDefault(session.UserId);
+        var avatar = new Avatar(
+            UserId:      session.UserId,
+            DisplayName: state.DisplayName ?? string.Empty,
+            Pose:        state.Transform);
+        await _behaviorHost.RaiseChatAsync(avatar, normalised.Text, normalised.Channel, ct)
+            .ConfigureAwait(false);
     }
 
     private async Task OnClientTouchPrim(ClientSession session, ClientTouchPrim touch, CancellationToken ct)

@@ -65,6 +65,10 @@ public sealed class ViewerClient : IAsyncDisposable
     /// <summary>Raised when a prim's state arrives (spawn or mutation).</summary>
     public event Action<PrimState>? PrimUpdated;
 
+    /// <summary>Raised when chat is received from the server. The sender's
+    /// own chat also fires this event — the server broadcasts to all sessions.</summary>
+    public event Action<ChatMessage>? ChatReceived;
+
     /// <summary>
     /// Complete the handshake with the server and start the background
     /// receive loop.
@@ -120,6 +124,14 @@ public sealed class ViewerClient : IAsyncDisposable
             Envelope.Encode(MessageKind.ClientTouchPrim, new ClientTouchPrim(primId)),
             ct).AsTask();
 
+    /// <summary>Send a chat message on <paramref name="channel"/> (0 = public).
+    /// The server sets <c>From</c> authoritatively — our value here is ignored.</summary>
+    public Task SendChatAsync(string text, int channel = 0, CancellationToken ct = default)
+        => _transport.SendAsync(
+            Envelope.Encode(MessageKind.ChatMessage,
+                new ChatMessage(MyUserId, channel, text)),
+            ct).AsTask();
+
     private async Task ReceiveLoopAsync(CancellationToken ct)
     {
         try
@@ -160,6 +172,11 @@ public sealed class ViewerClient : IAsyncDisposable
                 var prim = Envelope.DecodePayload<PrimUpdate>(frame);
                 _remotePrims[prim.State.Id] = prim.State;
                 PrimUpdated?.Invoke(prim.State);
+                break;
+
+            case MessageKind.ChatMessage:
+                var chat = Envelope.DecodePayload<ChatMessage>(frame);
+                ChatReceived?.Invoke(chat);
                 break;
 
             // Ping/Pong and other kinds not handled by the mirror.
