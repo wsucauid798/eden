@@ -74,57 +74,75 @@ public sealed class BehaviorHost
     }
 
     /// <summary>Fire every matching handler on every attached behavior.
-    /// Behaviors with no handler for <paramref name="attributeType"/> are
-    /// skipped. Per-behavior handler order is declaration order; across
-    /// behaviors the order is undefined.</summary>
+    /// <paramref name="filter"/> lets callers narrow on attribute properties
+    /// (e.g. <c>[OnChat(Channel = 5)]</c> only matches when channel 5 is
+    /// dispatched). Null filter matches every handler of
+    /// <paramref name="attributeType"/>.</summary>
     public async Task DispatchAsync(
-        Type               attributeType,
-        object[]           args,
-        CancellationToken  ct = default)
+        Type                         attributeType,
+        object[]                     args,
+        Func<EventAttribute, bool>?  filter = null,
+        CancellationToken            ct = default)
     {
         ArgumentNullException.ThrowIfNull(attributeType);
 
         foreach (var handle in _attached.Keys)
         {
-            if (!handle.Descriptor.Handlers.TryGetValue(attributeType, out var methods))
+            if (!handle.Descriptor.Handlers.TryGetValue(attributeType, out var bindings))
                 continue;
 
             if (handle.Gate is not null)
             {
                 await handle.Gate.WaitAsync(ct).ConfigureAwait(false);
-                try     { await InvokeHandlersAsync(handle, methods, args).ConfigureAwait(false); }
+                try     { await InvokeHandlersAsync(handle, bindings, args, filter).ConfigureAwait(false); }
                 finally { handle.Gate.Release(); }
             }
             else
             {
-                await InvokeHandlersAsync(handle, methods, args).ConfigureAwait(false);
+                await InvokeHandlersAsync(handle, bindings, args, filter).ConfigureAwait(false);
             }
         }
     }
 
+    /// <summary>Typed convenience for chat. Fires only handlers whose
+    /// <c>[OnChat(Channel = …)]</c> matches <paramref name="channel"/>.</summary>
+    public Task RaiseChatAsync(
+        Avatar             from,
+        string             text,
+        int                channel = 0,
+        CancellationToken  ct      = default)
+        => DispatchAsync(
+            typeof(OnChatAttribute),
+            [from, text],
+            attr => ((OnChatAttribute)attr).Channel == channel,
+            ct);
+
     private static async Task InvokeHandlersAsync(
-        BehaviorHandle          handle,
-        IReadOnlyList<MethodInfo> methods,
-        object[]                args)
+        BehaviorHandle                 handle,
+        IReadOnlyList<HandlerBinding>  bindings,
+        object[]                       args,
+        Func<EventAttribute, bool>?    filter)
     {
-        foreach (var method in methods)
+        foreach (var binding in bindings)
         {
+            if (filter is not null && !filter(binding.Attribute)) continue;
+
             try
             {
-                var task = (Task)method.Invoke(handle.Behavior, args)!;
+                var task = (Task)binding.Method.Invoke(handle.Behavior, args)!;
                 await task.ConfigureAwait(false);
             }
             catch (TargetInvocationException tie) when (tie.InnerException is not null)
             {
                 handle.Log.LogWarning(tie.InnerException,
                     "Handler {Method} on {Type} threw",
-                    method.Name, handle.Behavior.GetType().Name);
+                    binding.Method.Name, handle.Behavior.GetType().Name);
             }
             catch (Exception ex)
             {
                 handle.Log.LogWarning(ex,
                     "Handler {Method} on {Type} threw",
-                    method.Name, handle.Behavior.GetType().Name);
+                    binding.Method.Name, handle.Behavior.GetType().Name);
             }
         }
     }
