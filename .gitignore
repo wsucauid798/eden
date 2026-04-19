@@ -77,3 +77,14 @@ bin/maptiles/
 bin/*.db
 bin/*.log
 bin/OpenSim.log.*
+
+# ----- User-copied runtime configs (created from *.example at runtime) -----
+bin/OpenSim.ini
+bin/Regions.ini
+bin/Robust.ini
+bin/Robust.HG.ini
+bin/OpenSimConsoleHistory.txt
+bin/config-include/StandaloneCommon.ini
+bin/config-include/GridCommon.ini
+bin/config-include/FlotsamCache.ini
+bin/config-include/osslEnable.ini
