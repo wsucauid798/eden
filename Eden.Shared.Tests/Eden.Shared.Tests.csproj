@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Eden.Shared\Eden.Shared.csproj" />
+    <ProjectReference Include="..\Eden.Launcher\Eden.Launcher.csproj" />
+    <ProjectReference Include="..\Eden.Server.Core\Eden.Server.Core.csproj" />
   </ItemGroup>
 
 </Project>
