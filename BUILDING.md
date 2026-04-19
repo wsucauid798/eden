@@ -1,48 +1,30 @@
 # Building Eden
 
-Eden is a fork of OpenSimulator. Until the in-progress modernisation lands, the
-build system is inherited from upstream: a Prebuild XML file
-([prebuild.xml](prebuild.xml)) generates the solution and project files, and
-`dotnet build` compiles them.
-
----
-
 ## Requirements
 
-* [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
+* [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (pinned via `global.json`)
 * **Linux / macOS only:** `libgdiplus` (e.g. `apt-get install libgdiplus libc6-dev` on Debian/Ubuntu, or `brew install mono-libgdiplus` on macOS)
-* **Windows:** Visual Studio 2022 is optional — you can build entirely from the CLI with `dotnet`.
+* **Windows:** Visual Studio 2022/2025 is optional — the CLI is enough.
 
 ---
 
 ## Build
 
-### Windows
-
-```cmd
-runprebuild.bat
-dotnet build --configuration Release Eden.sln
-```
-
-Or open the generated `Eden.sln` in Visual Studio and build the solution.
-
-### Linux / macOS
-
 ```sh
-./runprebuild.sh
 dotnet build --configuration Release Eden.sln
 ```
 
-Running `runprebuild` is necessary whenever [prebuild.xml](prebuild.xml)
-changes; it regenerates the `.sln` and `.csproj` files.
+That's it. No prebuild step, no generator — the `.csproj` and `.sln` files are checked in.
+
+Open `Eden.sln` in Visual Studio / Rider / VS Code if you prefer an IDE.
 
 ---
 
 ## Running
 
 > **Note:** Binaries and config files still carry the inherited `OpenSim`
-> names (`OpenSim.exe`, `OpenSim.ini`, etc.) pending the post-demolition
-> assembly-name rename. See [_docs/_design/plan.md](_docs/_design/plan.md).
+> names (`OpenSim.exe`, `OpenSim.ini`, etc.) pending the post-Linden-cut
+> rename. See [_docs/_development/backlog.md](_docs/_development/backlog.md).
 
 From the `bin/` folder:
 
@@ -76,13 +58,3 @@ It defaults to SQLite, which needs no additional setup.
 
 Each grid has its own specific requirements — follow your grid's instructions
 where they diverge from the defaults.
-
----
-
-## References
-
-While the modernisation is in flight, upstream OpenSimulator documentation is
-still largely applicable to the build and configuration:
-
-* <http://opensimulator.org/wiki/Build_Instructions>
-* <http://opensimulator.org/wiki/Configuration>

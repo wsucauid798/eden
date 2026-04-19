@@ -24,23 +24,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          global-json-file: global.json
 
       - name: Install libgdiplus (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgdiplus libc6-dev
-
-      - name: Run prebuild (Linux)
-        if: runner.os == 'Linux'
-        run: ./runprebuild.sh
-
-      - name: Run prebuild (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: runprebuild.bat
 
       - name: Build
         run: dotnet build eden.sln --configuration Release --nologo

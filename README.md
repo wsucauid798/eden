@@ -6,18 +6,10 @@ Eden is a platform for creating virtual worlds.
 
 Requirements:
 
-* [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
+* [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (pinned via `global.json`)
 * On Linux / macOS: `libgdiplus` (e.g. `apt install libgdiplus libc6-dev`)
 
-Generate the projects, then build:
-
 ```sh
-# Linux / macOS
-./runprebuild.sh
-dotnet build --configuration Release Eden.sln
-
-# Windows
-runprebuild.bat
 dotnet build --configuration Release Eden.sln
 ```
 

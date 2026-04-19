@@ -6,19 +6,13 @@ is pulled in as a NuGet dependency of the test projects.
 
 ## Running the tests
 
-First, generate the solution and project files, then build:
+Build first, then run the tests:
 
 ```sh
-# Linux / macOS
-./runprebuild.sh
-dotnet build --configuration Release Eden.sln
-
-# Windows
-runprebuild.bat
 dotnet build --configuration Release Eden.sln
 ```
 
-Then run the tests:
+Then:
 
 ```sh
 dotnet test --configuration Release --no-build Eden.sln
@@ -46,8 +40,8 @@ dotnet test --logger "console;verbosity=detailed"
   rename.)
 - Keep tests close to the code they exercise: a `Tests/` sub-directory next to
   the source is the convention.
-- If you add a new test project, it must be listed in [prebuild.xml](prebuild.xml)
-  so that `runprebuild` picks it up.
+- If you add a new test project, add it to [Eden.sln](Eden.sln) so it gets
+  picked up by `dotnet build` / `dotnet test`.
 
 ## IDE integration
 
