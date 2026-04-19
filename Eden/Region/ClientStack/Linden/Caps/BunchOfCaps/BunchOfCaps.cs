@@ -1554,7 +1554,6 @@ namespace OpenSim.Region.ClientStack.Linden
                 Dictionary<byte, List<AttachmentScriptInfo>> perAttPoints = null;
                 if (atts.Count > 0)
                 {
-                    IUrlModule urlModule = m_Scene.RequestModuleInterface<IUrlModule>();
                     perAttPoints = new Dictionary<byte, List<AttachmentScriptInfo>>();
                     foreach (SceneObjectGroup so in atts)
                     {
@@ -1563,11 +1562,6 @@ namespace OpenSim.Region.ClientStack.Linden
                             continue;
                         int urls_used = 0;
                         totalmem += mem;
-                        if (urlModule != null)
-                        {
-                            urls_used = urlModule.GetUrlCount(so.UUID);
-                            totalurls += urls_used;
-                        }
                         AttachmentScriptInfo info = new AttachmentScriptInfo()
                         {
                             id = so.UUID,
@@ -1728,7 +1722,6 @@ namespace OpenSim.Region.ClientStack.Linden
             bool showdetail = showType != 0;
 
             List<ParcelScriptInfo> parcelsInfo = null;
-            IUrlModule urlModule = m_Scene.RequestModuleInterface<IUrlModule>();
 
             List<ILandObject>  allParcels = m_Scene.LandChannel.AllParcels();
             if (showdetail)
@@ -1767,11 +1760,6 @@ namespace OpenSim.Region.ClientStack.Linden
 
                     int urls_used = 0;
                     totalmem += mem;
-                    if (urlModule != null)
-                    {
-                        urls_used = urlModule.GetUrlCount(so.UUID);
-                        totalurls += urls_used;
-                    }
 
                     if (showdetail)
                     {

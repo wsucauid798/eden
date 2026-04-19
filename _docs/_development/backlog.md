@@ -43,12 +43,14 @@ explicitly decided to be *no replacement*.
 - [ ] LLUDP stack — remove `Eden/Region/ClientStack/Linden/*`
   - Replaced by: new wire protocol over Kestrel (WebSocket or WebTransport).
   - Breaks: client connection lifecycle, packet throttling, presence heartbeats, mesh/asset streaming pipe.
+  - **Deferred to Phase 1→2 boundary.** LLClientView is the only `IClientAPI` implementation; every scene-graph callsite would need a null stub of a several-hundred-method interface to keep the build green after deletion. That stub *is* Phase 2 work. Leave the `Linden/` directory intact until Phase 2 provides the new-protocol `IClientAPI` equivalent, then delete in one move.
 - [x] ~~LSL frontend — remove LSL grammar, compiler frontend, `ll*()` function surface~~ **Done.** Deleted: `ScriptEngine/YEngine/` (53 files, ~2.9 MB), `ScriptEngine/Shared/Api/Implementation/` (entire tree incl. plugins + AsyncCommandManager), `Shared/Api/Interface/`, `Shared/Api/Runtime/`, `Shared/Tests/`, `Shared/LSL_Types.cs`. Dropped 4 projects from `prebuild.xml`. Surviving `ScriptEngine/Shared/` keeps `Helpers.cs` (DetectParams, EventParams, exception types — generic, used by Scene events) with `LSL_Types.Vector3/Quaternion` substituted by `OpenMetaverse.Vector3/Quaternion`. `ScriptEngine/Interfaces/` (IScriptModule, IScriptEngine, …) kept as scaffolding for Phase 3. String references to "YEngine" in `Scene.cs` config defaults remain — harmless, Phase 3 will replace.
   - Still open: `bin/OpenSim.ini.example`, `bin/OpenSimDefaults.ini` config sections reference YEngine — rename / gut when we do the `bin/` config cleanup.
   - Note: the live `Thread.Abort()` in AsyncCommandManager died with this demolition.
 - [ ] Legacy caps handlers — remove inherited caps endpoints (keep the dispatch shape for later)
   - Replaced by: typed RPC endpoints on the new host.
   - Breaks: inventory fetches, mesh upload, asset transfer, seed-cap handshake.
+  - **Deferred to Phase 1→2 boundary.** Caps live inside `Linden/Caps/` and are tied to the Linden protocol; go with the LLUDP cut.
 - [ ] Custom HTTP server — remove `OSHttpServer` and the custom `HttpListener.cs`
   - Replaced by: ASP.NET Core + Kestrel (Phase 2).
   - Breaks: all service endpoints, startup sequencing, middleware shape.
@@ -69,9 +71,11 @@ explicitly decided to be *no replacement*.
 - [ ] XMLRPC and legacy grid protocols — delete with LLUDP
   - Replaced by: new RPC protocol; no grid-interop with OpenSim grids.
   - Breaks: any inter-grid message. Confirmed non-goal per plan.md.
+  - **Deferred to Phase 1→2 boundary.** The LLUDP research agent found XMLRPC code-wise independent from LLUDP, but protocol-wise it's the Linden login entry point. Dies with LLUDP when Phase 2's new protocol lands.
 - [ ] IAsyncResult / BeginInvoke async — mark for rewrite; delete any that were LLUDP-only
   - Replaced by: `Task`-based async / `await`.
   - Breaks: nothing functional — mechanical rewrite.
+  - **Deferred to Phase 2.** The LLUDP-only ones die with LLUDP. The rest (`WebUtil`, `RestObjectPoster*`, HTTP client callbacks) is a mechanical Task-based refactor that belongs with Phase 2 HTTP modernisation.
 - [ ] Build still succeeds with demolition merged
 - [ ] Surviving scene graph still loads and runs a smoke-test region
 - [x] ~~Bump `<LangVersion>` in `Directory.Build.props` from 12 back to `latest` once YEngine is demolished~~ **Done.** YEngine gone, LangVersion restored to `latest`, build clean.
