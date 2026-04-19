@@ -80,14 +80,13 @@ public partial class Main : Node3D
         _menuLabel = new Label
         {
             Text = "Pick mode:\n\n  [1] Solo\n  [2] Host\n  [3] Join (localhost:5001)",
-            AnchorsPreset = (int)Control.LayoutPreset.Center,
-            OffsetLeft   = -200,
-            OffsetTop    = -60,
-            OffsetRight  =  200,
-            OffsetBottom =  60,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment   = VerticalAlignment.Center,
         };
-        _menuLabel.AddThemeFontSizeOverride("font_size", 24);
+        _menuLabel.AddThemeFontSizeOverride("font_size", 32);
         AddChild(_menuLabel);
+        // Must call this after AddChild — it's a method, not a settable property.
+        _menuLabel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
     }
 
     private async Task StartAsync(string mode)
