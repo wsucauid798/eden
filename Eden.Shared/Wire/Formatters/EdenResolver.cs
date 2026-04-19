@@ -47,7 +47,9 @@ public sealed class EdenResolver : IFormatterResolver
                 t == typeof(AvatarUpdate) ? AvatarUpdateFormatter.Instance :
                 t == typeof(PrimUpdate)   ? PrimUpdateFormatter.Instance :
                 t == typeof(AvatarLeft)   ? AvatarLeftFormatter.Instance :
-                t == typeof(ChatMessage)  ? ChatMessageFormatter.Instance :
+                t == typeof(ChatMessage)      ? ChatMessageFormatter.Instance :
+                t == typeof(Healthcheck)      ? HealthcheckFormatter.Instance :
+                t == typeof(HealthcheckReply) ? HealthcheckReplyFormatter.Instance :
                 null;
 
             return f is null ? null : (IMessagePackFormatter<T>)f;

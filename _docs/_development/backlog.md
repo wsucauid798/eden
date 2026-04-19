@@ -77,9 +77,9 @@ depended on that tree is now done by deletion.
 - [x] ~~Bump target framework `net8_0` → `net10_0`~~ Done across all csproj files; `global.json` pins SDK to 10.0.100+.
 - [x] ~~Pin monorepo layout~~ `Eden.Shared` / `Eden.Client` / `Eden.Server.Core` / `Eden.Launcher` / `Eden.Viewer` at repo root. Legacy `Eden/` tree gone.
 - [x] ~~Decide central package management~~ Adopted `Directory.Packages.props` at repo root. `CentralPackageTransitivePinningEnabled=true`. All 11 package versions live in one file; csproj files just `<PackageReference Include="…" />`.
-- [ ] Pick DI container — default to `Microsoft.Extensions.DependencyInjection` unless reason not to
+- [x] ~~Pick DI container~~ `Microsoft.Extensions.DependencyInjection`. `Eden.Logging.AddEdenLogging(this IServiceCollection, ...)` extension wires Serilog through the standard `ILoggerFactory`/`ILogger<T>` graph. Composition roots (viewer, future CLI, tests) build a `ServiceProvider` and resolve normally.
 - [x] ~~Define wire protocol versioning scheme from day 1~~ `EdenVersion.WireProtocol` constant shipped in `ClientHello`/`ServerHello`; server rejects mismatched versions.
-- [ ] Add health-check / liveness endpoint to the server host
+- [x] ~~Add health-check / liveness endpoint to the server host~~ Pre-handshake `MessageKind.Healthcheck` probe. `HealthcheckReply` carries product/release/wire protocol/uptime/session count/world id. Probe via `EdenLauncher.CheckHealthAsync(host, port, timeout)` — opens a throwaway QUIC connection, sends frame, returns reply. No Hello required.
 
 ---
 

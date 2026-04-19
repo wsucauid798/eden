@@ -22,6 +22,7 @@ public sealed class EdenServer
 {
     private readonly EdenId<WorldTag> _worldId;
     private readonly ILogger<EdenServer> _logger;
+    private readonly DateTime _startedUtc = DateTime.UtcNow;
     private readonly ConcurrentDictionary<EdenId<SessionTag>, ClientSession> _sessions = new();
     private readonly ConcurrentDictionary<EdenId<UserTag>,    AvatarState>   _avatars  = new();
 
@@ -33,6 +34,14 @@ public sealed class EdenServer
 
     public int SessionCount => _sessions.Count;
     public int AvatarCount  => _avatars.Count;
+
+    internal HealthcheckReply BuildHealthReply() => new(
+        Product:       EdenVersion.Product,
+        Release:       EdenVersion.Release,
+        WireProtocol:  EdenVersion.WireProtocol,
+        UptimeSeconds: (long)(DateTime.UtcNow - _startedUtc).TotalSeconds,
+        SessionCount:  _sessions.Count,
+        WorldId:       _worldId);
 
     /// <summary>
     /// Run a message loop against one client's transport until it closes or
@@ -61,6 +70,12 @@ public sealed class EdenServer
                         var ping = Envelope.DecodePayload<Ping>(frame.Value);
                         await transport.SendAsync(
                             Envelope.Encode(MessageKind.Pong, new Pong(ping.ClientTicks, DateTime.UtcNow.Ticks)),
+                            ct).ConfigureAwait(false);
+                        break;
+
+                    case MessageKind.Healthcheck:
+                        await transport.SendAsync(
+                            Envelope.Encode(MessageKind.HealthcheckReply, BuildHealthReply()),
                             ct).ConfigureAwait(false);
                         break;
 

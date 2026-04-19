@@ -5,6 +5,8 @@ using Eden.Launcher.Quic;
 using Eden.Server.Core;
 using Eden.Shared.Ids;
 using Eden.Shared.Transport;
+using Eden.Shared.Wire;
+using Eden.Shared.Wire.Messages;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -123,6 +125,40 @@ public static class EdenLauncher
         logger.LogInformation("Connected to {Host}:{Port} via QUIC", host, port);
 
         return new QuicTransport(stream, ownedConnection: connection);
+    }
+
+    /// <summary>
+    /// Open a throwaway QUIC connection to a remote Eden server and retrieve
+    /// its <see cref="HealthcheckReply"/>. Does not complete the handshake —
+    /// use this for ops probes, load-balancer checks, and smoke tests.
+    /// </summary>
+    /// <param name="timeout">How long to wait for the connect + reply round-trip.</param>
+    public static async Task<HealthcheckReply> CheckHealthAsync(
+        string             host,
+        int                port,
+        TimeSpan?          timeout        = null,
+        ILoggerFactory?    loggerFactory  = null,
+        CancellationToken  ct             = default)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout ?? TimeSpan.FromSeconds(5));
+
+        await using var transport =
+            await ConnectAsync(host, port, loggerFactory, cts.Token).ConfigureAwait(false);
+
+        await transport.SendAsync(
+            Envelope.Encode(MessageKind.Healthcheck, new Healthcheck()),
+            cts.Token).ConfigureAwait(false);
+
+        var frame = await transport.ReceiveAsync(cts.Token).ConfigureAwait(false);
+        if (frame is null)
+            throw new InvalidOperationException("Connection closed before healthcheck reply");
+
+        var kind = Envelope.PeekKind(frame.Value);
+        if (kind != MessageKind.HealthcheckReply)
+            throw new InvalidOperationException($"Expected HealthcheckReply, got {kind}");
+
+        return Envelope.DecodePayload<HealthcheckReply>(frame.Value);
     }
 
     private static async Task AcceptLoopAsync(

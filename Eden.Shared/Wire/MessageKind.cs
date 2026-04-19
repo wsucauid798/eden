@@ -21,6 +21,10 @@ public enum MessageKind : byte
     // --- Chat ---
     ChatMessage  = 20,
 
+    // --- Operational probes (pre-session, no handshake required) ---
+    Healthcheck      = 200,
+    HealthcheckReply = 201,
+
     // --- Keepalive ---
     Ping         = 250,
     Pong         = 251,

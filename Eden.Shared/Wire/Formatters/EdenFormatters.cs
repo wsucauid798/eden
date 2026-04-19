@@ -330,6 +330,54 @@ public sealed class AvatarLeftFormatter : IMessagePackFormatter<AvatarLeft>
     }
 }
 
+public sealed class HealthcheckFormatter : IMessagePackFormatter<Healthcheck>
+{
+    public static readonly HealthcheckFormatter Instance = new();
+
+    public void Serialize(ref MessagePackWriter writer, Healthcheck value, MessagePackSerializerOptions options)
+    {
+        writer.WriteArrayHeader(0);
+    }
+
+    public Healthcheck Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    {
+        var count = reader.ReadArrayHeader();
+        if (count != 0)
+            throw new MessagePackSerializationException($"Healthcheck expects 0 elements, got {count}");
+        return new Healthcheck();
+    }
+}
+
+public sealed class HealthcheckReplyFormatter : IMessagePackFormatter<HealthcheckReply>
+{
+    public static readonly HealthcheckReplyFormatter Instance = new();
+
+    public void Serialize(ref MessagePackWriter writer, HealthcheckReply value, MessagePackSerializerOptions options)
+    {
+        writer.WriteArrayHeader(6);
+        writer.Write(value.Product);
+        writer.Write(value.Release);
+        writer.Write(value.WireProtocol);
+        writer.Write(value.UptimeSeconds);
+        writer.Write(value.SessionCount);
+        EdenIdFormatter<WorldTag>.Instance.Serialize(ref writer, value.WorldId, options);
+    }
+
+    public HealthcheckReply Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    {
+        var count = reader.ReadArrayHeader();
+        if (count != 6)
+            throw new MessagePackSerializationException($"HealthcheckReply expects 6 elements, got {count}");
+        return new HealthcheckReply(
+            reader.ReadString() ?? string.Empty,
+            reader.ReadString() ?? string.Empty,
+            reader.ReadString() ?? string.Empty,
+            reader.ReadInt64(),
+            reader.ReadInt32(),
+            EdenIdFormatter<WorldTag>.Instance.Deserialize(ref reader, options));
+    }
+}
+
 public sealed class ChatMessageFormatter : IMessagePackFormatter<ChatMessage>
 {
     public static readonly ChatMessageFormatter Instance = new();
