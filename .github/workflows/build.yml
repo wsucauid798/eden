@@ -1,0 +1,89 @@
+name: Build
+
+# Produces runnable binaries from each push and uploads them as GitHub
+# Actions artifacts. Anyone can download the result from the run page
+# without having .NET or Godot installed — that's what build/ is for.
+
+on:
+  push:
+    branches: [ main, 'release/**' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  server:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build + publish Eden.Server.Cli for ${{ matrix.rid }}
+        shell: pwsh
+        run: ./scripts/build.ps1 -Rid ${{ matrix.rid }}
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: eden-server-${{ matrix.rid }}
+          path: build/eden-server-${{ matrix.rid }}/
+          if-no-files-found: error
+
+  # Viewer export runs on Linux with Godot headless.
+  # Needs the repo's export_presets.cfg and export templates fetched
+  # per-run (cached for speed).
+  viewer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install Godot 4.6.1 Mono (headless)
+        run: |
+          set -eux
+          cd $RUNNER_TEMP
+          curl -sSL -o godot.zip \
+            https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_mono_linux_x86_64.zip
+          unzip -q godot.zip
+          mv Godot_v4.6.1-stable_mono_linux_x86_64 godot_mono
+          echo "GODOT_BIN=$RUNNER_TEMP/godot_mono/Godot_v4.6.1-stable_mono_linux.x86_64" >> $GITHUB_ENV
+
+      - name: Install export templates
+        run: |
+          set -eux
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.6.1.stable.mono"
+          curl -sSL -o templates.tpz \
+            https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_mono_export_templates.tpz
+          unzip -q -d "$HOME/.local/share/godot/export_templates/4.6.1.stable.mono" templates.tpz
+          # Templates unzip under a `templates/` dir; flatten.
+          mv "$HOME/.local/share/godot/export_templates/4.6.1.stable.mono/templates/"* \
+             "$HOME/.local/share/godot/export_templates/4.6.1.stable.mono/"
+          rmdir "$HOME/.local/share/godot/export_templates/4.6.1.stable.mono/templates"
+
+      - name: Build viewer (Linux)
+        run: ./scripts/build.sh linux-x64
+
+      - name: Upload viewer binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: eden-viewer-linux-x64
+          path: build/eden-viewer-linux-x64/
+          if-no-files-found: warn

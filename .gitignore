@@ -16,6 +16,11 @@ _docs/_design/
 **/bin/Debug/
 **/bin/Release/
 
+# ----- Published artifacts (produced by scripts/build.ps1 / build.sh) -----
+/build/*
+!/build/README.md
+!/build/.gitkeep
+
 # ----- Build artefacts -----
 *.pdb
 *.mdb

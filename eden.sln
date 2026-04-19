@@ -27,6 +27,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting", "src\Eden.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting.Host", "src\Eden.Scripting\Host\Eden.Scripting.Host.csproj", "{ACC107DE-B08D-4E25-917B-EEA57D2246EC}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Server.Cli", "src\Eden.Server.Cli\Eden.Server.Cli.csproj", "{6A6D8594-750B-4BB5-B7D6-D800D006044B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -145,8 +149,23 @@ Global
 		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|x64.Build.0 = Release|Any CPU
 		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|x86.ActiveCfg = Release|Any CPU
 		{ACC107DE-B08D-4E25-917B-EEA57D2246EC}.Release|x86.Build.0 = Release|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Debug|x64.Build.0 = Debug|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Debug|x86.Build.0 = Debug|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Release|x64.ActiveCfg = Release|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Release|x64.Build.0 = Release|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Release|x86.ActiveCfg = Release|Any CPU
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{6A6D8594-750B-4BB5-B7D6-D800D006044B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

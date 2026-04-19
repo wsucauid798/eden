@@ -3,42 +3,81 @@
 ## Requirements
 
 * [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (pinned via `global.json`)
-* **Windows:** Visual Studio 2022/2025 is optional — the CLI is enough.
+* **Godot 4.6.1 Mono** — only if you want to build the viewer. The server
+  CLI builds without Godot. Either put the Godot binary on `PATH`, or
+  set `GODOT_BIN=<path-to-executable>` for the build scripts.
 
 ---
 
-## Build
+## Produce runnable binaries
 
-```sh
-dotnet build --configuration Release eden.sln
+```pwsh
+scripts/build.ps1                       # host OS, x64
+scripts/build.ps1 -Rid linux-x64        # cross-compile
+scripts/build.ps1 -Clean                # wipe build/ first
 ```
 
-That's it. No prebuild step, no generator — the `.csproj` and `.sln` files are checked in.
+```sh
+scripts/build.sh                        # host OS
+scripts/build.sh linux-x64              # cross-compile
+scripts/build.sh --clean
+```
 
-Open `eden.sln` in Visual Studio / Rider / VS Code if you prefer an IDE.
+Output lands in [`build/`](../../build/README.md):
+
+```
+build/
+  eden-server-win-x64/
+    Eden.Server.Cli.exe   ← the headless server, double-click to run
+  eden-viewer-win-x64/
+    Eden.Viewer.exe       ← the Godot viewer
+```
+
+Both binaries are self-contained — you can copy the directory to
+another machine and run it without installing .NET or Godot.
+
+If Godot isn't available, the script still builds the server CLI and
+skips the viewer with a clear message. See [build/README.md](../../build/README.md)
+for the one-time Godot-setup step (installing export templates).
 
 ---
 
-## Run
+## Develop locally
 
-`Eden.Launcher` is a library exposing `EdenLauncher.StartSolo` / `StartHostAsync` / `ConnectAsync` — it has no `Main`. The entry point is [`src/Eden.Viewer/`](src/Eden.Viewer/README.md), a separate Godot 4 project built from the Godot editor. The viewer is not part of `eden.sln`; open `src/Eden.Viewer/project.godot` in Godot to build and run it.
+```sh
+dotnet build --configuration Release eden.sln      # build every non-viewer project
+dotnet test  --configuration Release eden.sln      # run all xUnit suites
+```
 
-Test harnesses exercise the launcher directly via `EdenLauncher.StartSolo()` etc. — see [`tests/Eden.Tests/`](tests/Eden.Tests/).
+Open `eden.sln` in Visual Studio / Rider / VS Code for IDE integration.
+The viewer is a separate Godot project: open `src/Eden.Viewer/project.godot`
+in Godot 4.6.1 to edit or run from the editor.
+
+Test harnesses exercise the launcher directly via `EdenLauncher.StartSolo()`.
+See the per-project test directories under `tests/`.
 
 ---
 
 ## Layout
 
 ```
-src/                     — product projects (one per directory)
+src/                     — product source (devs work here)
   Eden.Shared/           — domain types + wire protocol
   Eden.Server/           — authoritative sim
+  Eden.Server.Cli/       — headless server binary (Main entry point)
   Eden.Client/           — ViewerClient, world-state mirror
   Eden.Launcher/         — StartSolo / StartHostAsync / ConnectAsync + QUIC
   Eden.Logging/          — Serilog composition root
-  Eden.Scripting/        — EdenBehavior + event attributes (referenced by scripts)
+  Eden.Scripting/        — EdenBehavior + event attributes
     Host/                — Eden.Scripting.Host runtime (server-side)
   Eden.Viewer/           — Godot 4 project (not in eden.sln)
-tests/
-  Eden.Tests/            — xUnit suite covering every src/ project
+tests/                   — test source (devs work here)
+  Eden.<project>.Tests/  — one xUnit suite per src/ project
+  Eden.Viewer.Tests/     — gdUnit4 suite for the viewer
+build/                   — compiled binaries (users run here)
+  eden-server-<rid>/     — self-contained server CLI per platform
+  eden-viewer-<rid>/     — Godot-exported viewer per platform
+scripts/
+  build.ps1              — produce build/ contents (PowerShell)
+  build.sh               — produce build/ contents (bash)
 ```
