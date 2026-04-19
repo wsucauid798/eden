@@ -90,7 +90,7 @@ explicitly decided to be *no replacement*.
 - [ ] Populate `Eden.Shared` with domain types: `Vector3`, `AvatarState`, `Prim`, `ItemId`, event shapes, wire messages
 - [ ] Move domain types from surviving `Eden/Framework` into `Eden.Shared`
 - [ ] Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server
-- [ ] Implement wire protocol transport (server side) — WebTransport over QUIC via `System.Net.Quic`
+- [ ] Implement wire protocol transport (server side) — QUIC via `System.Net.Quic`
 - [ ] Register custom MessagePack formatters for the `Eden.Shared` domain types (index-keyed, not property-name-keyed) — brings typical `AvatarState` from ~250 B down to ~100 B without polluting records with `[Key]` attributes
 - [ ] Replace config layer with `Microsoft.Extensions.Configuration`
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
@@ -187,7 +187,7 @@ post-demolition.
 *All closed 2026-04-19. See [plan.md](../_design/plan.md) decision log for outcomes.*
 
 - [x] Script sandboxing model — **trust** for MVP; keep host abstraction WASM-compatible
-- [x] Wire protocol — **WebTransport over QUIC** (`System.Net.Quic`), MessagePack payloads
+- [x] Wire protocol — **QUIC** (`System.Net.Quic`), MessagePack payloads. WebTransport framing dropped — desktop-only, no browser client planned.
 - [x] Content portability — **fresh start**; no OpenSim migration tooling baked in
 
 ---
