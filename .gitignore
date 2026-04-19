@@ -15,6 +15,8 @@ _docs/_design/
 # Note: root /bin is intentionally NOT ignored — it holds vendored
 # third-party DLLs alongside build output. Revisit once modernised.
 **/obj/
+**/bin/Debug/
+**/bin/Release/
 Eden/**/bin/
 addon-modules/**/bin/
 Prebuild/**/bin/
