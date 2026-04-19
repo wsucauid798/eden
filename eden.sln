@@ -3,7 +3,17 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 22
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Shared", "src\Eden.Shared\Eden.Shared.csproj", "{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Tests", "tests\Eden.Tests\Eden.Tests.csproj", "{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Shared.Tests", "tests\Eden.Shared.Tests\Eden.Shared.Tests.csproj", "{A01E00A1-0000-0000-0000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Scripting.Tests", "tests\Eden.Scripting.Tests\Eden.Scripting.Tests.csproj", "{A01E00A1-0000-0000-0000-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Server.Tests", "tests\Eden.Server.Tests\Eden.Server.Tests.csproj", "{A01E00A1-0000-0000-0000-000000000003}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Client.Tests", "tests\Eden.Client.Tests\Eden.Client.Tests.csproj", "{A01E00A1-0000-0000-0000-000000000004}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Launcher.Tests", "tests\Eden.Launcher.Tests\Eden.Launcher.Tests.csproj", "{A01E00A1-0000-0000-0000-000000000005}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Logging.Tests", "tests\Eden.Logging.Tests\Eden.Logging.Tests.csproj", "{A01E00A1-0000-0000-0000-000000000006}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eden.Server", "src\Eden.Server\Eden.Server.csproj", "{39B9BCAB-6324-4366-8B5F-0FF356CF7995}"
 EndProject
@@ -39,18 +49,30 @@ Global
 		{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}.Release|x64.Build.0 = Release|Any CPU
 		{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}.Release|x86.ActiveCfg = Release|Any CPU
 		{7D0616BA-EE42-4A43-94A5-BB2ABD14D92C}.Release|x86.Build.0 = Release|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Debug|x64.Build.0 = Debug|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Debug|x86.Build.0 = Debug|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Release|x64.ActiveCfg = Release|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Release|x64.Build.0 = Release|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Release|x86.ActiveCfg = Release|Any CPU
-		{7CCAD0B5-2283-4D62-85A1-107C0D14B87F}.Release|x86.Build.0 = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000002}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000003}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000003}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000003}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000004}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000004}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000004}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000004}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000005}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000005}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000005}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000005}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000006}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000006}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A01E00A1-0000-0000-0000-000000000006}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A01E00A1-0000-0000-0000-000000000006}.Release|Any CPU.Build.0 = Release|Any CPU
 		{39B9BCAB-6324-4366-8B5F-0FF356CF7995}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{39B9BCAB-6324-4366-8B5F-0FF356CF7995}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{39B9BCAB-6324-4366-8B5F-0FF356CF7995}.Debug|x64.ActiveCfg = Debug|Any CPU

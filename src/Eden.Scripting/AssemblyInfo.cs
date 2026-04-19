@@ -1,4 +1,4 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Eden.Scripting.Host")]
-[assembly: InternalsVisibleTo("Eden.Tests")]
+[assembly: InternalsVisibleTo("Eden.Scripting.Tests")]
