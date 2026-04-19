@@ -222,16 +222,30 @@ public partial class Main : Node3D
         _prims = new PrimRenderer();
         AddChild(_prims);
 
+        // Checkered floor, generous size — scale cue + visual interest.
         var floor = new MeshInstance3D
         {
-            Mesh     = new PlaneMesh { Size = new Vector2(80f, 80f) },
+            Mesh     = new PlaneMesh { Size = new Vector2(200f, 200f) },
             Position = Vector3.Zero,
         };
+        var checkerImg = Image.CreateEmpty(2, 2, false, Image.Format.Rgb8);
+        checkerImg.SetPixel(0, 0, new Color(0.58f, 0.58f, 0.60f));
+        checkerImg.SetPixel(1, 0, new Color(0.42f, 0.42f, 0.45f));
+        checkerImg.SetPixel(0, 1, new Color(0.42f, 0.42f, 0.45f));
+        checkerImg.SetPixel(1, 1, new Color(0.58f, 0.58f, 0.60f));
+        var checkerTex = ImageTexture.CreateFromImage(checkerImg);
         floor.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.22f, 0.22f, 0.25f),
+            AlbedoTexture            = checkerTex,
+            TextureFilter            = BaseMaterial3D.TextureFilterEnum.Nearest,
+            Uv1Scale                 = new Vector3(50f, 50f, 1f),
+            Roughness                = 0.85f,
+            Metallic                 = 0.0f,
         });
         AddChild(floor);
+
+        // A few reference props so the world isn't two cubes in a void.
+        BuildReferenceProps();
 
         // Player — blue cube + billboarded name label.
         _playerCube = new MeshInstance3D
@@ -260,6 +274,76 @@ public partial class Main : Node3D
         _yawPivot.AddChild(_pitchPivot);
         _pitchPivot.AddChild(camera);
         camera.LookAt(_cameraRig.GlobalPosition + Vector3.Up * 0.8f, Vector3.Up);
+    }
+
+    /// <summary>Quick decor: a ring of pillars + a central monolith so the
+    /// world has scale cues and shadow casters. Pure presentation; these
+    /// live only in the viewer, not on the server.</summary>
+    private void BuildReferenceProps()
+    {
+        // Central monolith.
+        var mono = new MeshInstance3D
+        {
+            Mesh     = new BoxMesh { Size = new Vector3(2f, 8f, 2f) },
+            Position = new Vector3(15f, 4f, -18f),
+        };
+        mono.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.20f, 0.22f, 0.28f),
+            Roughness   = 0.6f,
+            Metallic    = 0.1f,
+        });
+        AddChild(mono);
+
+        // Ring of 8 pillars at radius 25.
+        for (var i = 0; i < 8; i++)
+        {
+            var angle = i * Mathf.Tau / 8f;
+            var pillar = new MeshInstance3D
+            {
+                Mesh = new CylinderMesh
+                {
+                    TopRadius    = 0.8f,
+                    BottomRadius = 1.0f,
+                    Height       = 5f,
+                },
+                Position = new Vector3(
+                    Mathf.Cos(angle) * 25f,
+                    2.5f,
+                    Mathf.Sin(angle) * 25f),
+            };
+            pillar.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.80f, 0.78f, 0.72f),
+                Roughness   = 0.7f,
+            });
+            AddChild(pillar);
+        }
+
+        // A couple of coloured spheres near the spawn for near-field interest.
+        var sphereA = new MeshInstance3D
+        {
+            Mesh     = new SphereMesh { Radius = 1.2f, Height = 2.4f },
+            Position = new Vector3(-4f, 1.2f, -6f),
+        };
+        sphereA.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.90f, 0.40f, 0.35f),
+            Roughness   = 0.4f,
+        });
+        AddChild(sphereA);
+
+        var sphereB = new MeshInstance3D
+        {
+            Mesh     = new SphereMesh { Radius = 0.9f, Height = 1.8f },
+            Position = new Vector3(5f, 0.9f, -7f),
+        };
+        sphereB.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.35f, 0.75f, 0.50f),
+            Roughness   = 0.4f,
+        });
+        AddChild(sphereB);
     }
 
     private static Label3D BuildNameLabel(string text) => new Label3D

@@ -37,20 +37,56 @@ public partial class WorldRenderer : Node3D
     {
         _sun = new DirectionalLight3D
         {
-            LightEnergy   = 1.2f,
-            ShadowEnabled = true,
+            LightEnergy           = 1.6f,
+            LightColor            = new Color(1.0f, 0.97f, 0.92f), // slightly warm
+            ShadowEnabled         = true,
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
+            DirectionalShadowMaxDistance = 200f,
+            ShadowBias            = 0.05f,
+            ShadowNormalBias      = 2.0f,
         };
         AddChild(_sun);
 
+        var sky = new PhysicalSkyMaterial
+        {
+            RayleighCoefficient = 2.0f,
+            MieCoefficient      = 0.005f,
+            SunDiscScale        = 2.5f,      // visible sun instead of a pinprick
+            GroundColor         = new Color(0.35f, 0.35f, 0.30f),
+            EnergyMultiplier    = 1.0f,
+        };
+
         var env = new Godot.Environment
         {
-            BackgroundMode     = Godot.Environment.BGMode.Sky,
-            Sky                = new Sky { SkyMaterial = new PhysicalSkyMaterial() },
-            AmbientLightSource = Godot.Environment.AmbientSource.Sky,
-            TonemapMode        = Godot.Environment.ToneMapper.Filmic,
-            FogEnabled         = true,
-            FogDensity         = 0.002f,
+            BackgroundMode      = Godot.Environment.BGMode.Sky,
+            Sky                 = new Sky { SkyMaterial = sky },
+
+            AmbientLightSource  = Godot.Environment.AmbientSource.Sky,
+            AmbientLightSkyContribution = 1.0f,
+            AmbientLightEnergy  = 1.0f,
+
+            TonemapMode         = Godot.Environment.ToneMapper.Filmic,
+            TonemapExposure     = 1.0f,
+            TonemapWhite        = 6.0f,
+
+            // Subtle distance fog so the horizon isn't a razor edge.
+            FogEnabled          = true,
+            FogMode             = Godot.Environment.FogModeEnum.Exponential,
+            FogDensity          = 0.002f,
+            FogLightColor       = new Color(0.82f, 0.86f, 0.92f),
+
+            // Ambient occlusion — cube corners catch shadow, feel 3D.
+            SsaoEnabled         = true,
+            SsaoIntensity       = 1.5f,
+            SsaoRadius          = 1.0f,
+
+            // Subtle bloom around bright pixels.
+            GlowEnabled         = true,
+            GlowIntensity       = 0.3f,
+            GlowStrength        = 0.7f,
+            GlowBloom           = 0.05f,
         };
+
         _worldEnv = new WorldEnvironment { Environment = env };
         AddChild(_worldEnv);
     }
