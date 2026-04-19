@@ -48,6 +48,7 @@ public partial class Main : Node3D
     private Label?          _menuLabel;
     private Label?          _hudLabel;
     private WorldRenderer?  _world;
+    private PrimRenderer?   _prims;
 
     private readonly Dictionary<EdenId<UserTag>, RemoteAvatar> _remote          = new();
     private readonly ConcurrentQueue<AvatarState>              _pendingUpdates  = new();
@@ -167,6 +168,7 @@ public partial class Main : Node3D
         _client.AvatarUpdated += state  => _pendingUpdates.Enqueue(state);
         _client.AvatarLeft    += userId => _pendingLeaves.Enqueue(userId);
         if (_world is not null) _world.Bind(_client);
+        if (_prims is not null) _prims.Bind(_client);
 
         await _client.ConnectAsync(_displayName);
         GD.Print($"[Eden] connected. My UserId = {_client.MyUserId}");
@@ -214,6 +216,11 @@ public partial class Main : Node3D
         // to the ViewerClient in StartAsync.
         _world = new WorldRenderer();
         AddChild(_world);
+
+        // PrimRenderer mirrors RemotePrims into the scene as MeshInstance3Ds.
+        // Wired to the client after ConnectAsync.
+        _prims = new PrimRenderer();
+        AddChild(_prims);
 
         var floor = new MeshInstance3D
         {
