@@ -66,7 +66,7 @@ depended on that tree is now done by deletion.
 - [x] ~~Move domain types from surviving `Eden/Framework` into `Eden.Shared`~~ obsoleted at the Phase 1→2 boundary — `Eden/Framework` is gone, `Eden.Shared` is the authoritative model.
 - [x] ~~Stand up ASP.NET Core host (Kestrel) to replace removed HTTP server~~ Went direct QUIC via `System.Net.Quic` (`EdenLauncher.StartHostAsync`). No HTTP layer in the runtime.
 - [x] ~~Implement wire protocol transport (server side) — QUIC via `System.Net.Quic`~~ `QuicTransport` + `InMemoryTransport` both implement `ITransport`. Multi-client server (`EdenServer.HandleClientAsync`) with avatar registry + broadcast. `QuicHostIntegrationTests` exercises real QUIC end-to-end.
-- [ ] Register custom MessagePack formatters for the `Eden.Shared` domain types (index-keyed, not property-name-keyed) — brings typical `AvatarState` from ~250 B down to ~100 B without polluting records with `[Key]` attributes
+- [x] ~~Register custom MessagePack formatters for the `Eden.Shared` domain types~~ `EdenResolver` + per-type array-keyed formatters (`Eden.Shared/Wire/Formatters/`). Measured: AvatarState 96 B (minimal) / 116 B (realistic), PrimState 117 B, Vector3 16 B, Transform 38 B. Records unchanged — no `[Key]` attributes.
 - [ ] Replace config layer with `Microsoft.Extensions.Configuration`
 - [ ] Replace logging with `Microsoft.Extensions.Logging` (Serilog provider)
 - [ ] Migrate MySQL.Data to MySqlConnector — deferred until a database layer actually lands in the new tree
