@@ -41,4 +41,28 @@ public readonly record struct WorldConfig(
     Vector3 InitialWind      = default,      // (0,0,0)
     Weather InitialWeather   = Weather.Clear,
     float   Gravity          = 9.81f,
-    float   StartHoursOfDay  = 8f);          // start at 08:00
+    float   StartHoursOfDay  = 8f)           // start at 08:00
+{
+    /// <summary>Canonical defaults for a brand-new world. Avoid relying on
+    /// the parameterless struct constructor, which zero-initializes values
+    /// when no explicit constructor is provided.</summary>
+    public static WorldConfig Default => new(
+        Name: "New Eden",
+        DayLengthSeconds: 24f * 60f,
+        InitialWind: default,
+        InitialWeather: Weather.Clear,
+        Gravity: 9.81f,
+        StartHoursOfDay: 8f);
+
+    /// <summary>Make <c>new WorldConfig()</c> match the documented defaults
+    /// instead of the CLR's zero-initialized struct state.</summary>
+    public WorldConfig() : this(
+        Name: "New Eden",
+        DayLengthSeconds: 24f * 60f,
+        InitialWind: default,
+        InitialWeather: Weather.Clear,
+        Gravity: 9.81f,
+        StartHoursOfDay: 8f)
+    {
+    }
+}

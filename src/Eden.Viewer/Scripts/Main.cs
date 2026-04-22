@@ -27,8 +27,17 @@ namespace Eden.Viewer;
 ///   <item>Esc  — release / recapture mouse</item>
 /// </list>
 /// </summary>
+[Tool]
 public partial class Main : Node3D
 {
+    private const string GeneratedRootName = "__GeneratedScene";
+    private const string EditorPreviewWorldName = "Editor Preview";
+    private enum SceneBuildMode
+    {
+        Runtime,
+        EditorPreview,
+    }
+
     private const float  MoveSpeed        = 4f;
     private const float  SprintMultiplier = 2.5f;
     private const float  TurnSpeed        = 10f;   // rad/s — how fast the avatar yaws toward the movement direction
@@ -59,6 +68,7 @@ public partial class Main : Node3D
     private Camera3D?       _camera;
     private Label?          _menuLabel;
     private Label?          _hudLabel;
+    private Label?          _debugHudLabel;
     private WorldRenderer?  _world;
     private PrimRenderer?   _prims;
 
@@ -77,6 +87,57 @@ public partial class Main : Node3D
     private float  _pitch = -0.25f;
     private bool   _started;
     private string _displayName = "Player";
+    private Node3D? _generatedRoot;
+    private bool  _editorPreviewEnabled = true;
+    // Match the server's default solo-world start time so editor preview
+    // and runtime are comparable without extra tweaking.
+    private float _previewTimeOfDayHours = 8f;
+    private Weather _previewWeather = Weather.Clear;
+    private bool _editorPreviewRefreshQueued;
+    private readonly Queue<string> _debugMessages = new();
+    private bool _debugHudEnabled = true;
+    private bool _debugOutputEnabled = true;
+    private int _lastLoggedWorldHour = -1;
+    private Weather? _lastLoggedWeather;
+    private bool? _lastLoggedNightSkyEnabled;
+    private const int MaxDebugMessages = 8;
+
+    [Export]
+    public bool EditorPreviewEnabled
+    {
+        get => _editorPreviewEnabled;
+        set
+        {
+            if (_editorPreviewEnabled == value) return;
+            _editorPreviewEnabled = value;
+            QueueEditorPreviewRefresh();
+        }
+    }
+
+    [Export(PropertyHint.Range, "0,24,0.1")]
+    public float PreviewTimeOfDayHours
+    {
+        get => _previewTimeOfDayHours;
+        set
+        {
+            var wrapped = SunMath.WrapHours(value);
+            if (Mathf.IsEqualApprox(_previewTimeOfDayHours, wrapped)) return;
+            _previewTimeOfDayHours = wrapped;
+            QueueEditorPreviewRefresh();
+        }
+    }
+
+    [Export]
+    public Weather PreviewWeather
+    {
+        get => _previewWeather;
+        set
+        {
+            if (_previewWeather == value) return;
+            _previewWeather = value;
+            QueueEditorPreviewRefresh();
+        }
+    }
 
     // ------------------------------------------------------------------
     // Lifecycle
@@ -85,6 +146,12 @@ public partial class Main : Node3D
     public override void _Ready()
     {
         _displayName = OS.GetEnvironment("USERNAME") is { Length: > 0 } u ? u : "Player";
+
+        if (Engine.IsEditorHint())
+        {
+            QueueEditorPreviewRefresh();
+            return;
+        }
 
         var envMode = (OS.GetEnvironment("EDEN_MODE") ?? "").ToLowerInvariant();
         if (envMode is "solo" or "host" or "join")
@@ -115,6 +182,18 @@ public partial class Main : Node3D
 
         switch (@event)
         {
+            case InputEventKey { Pressed: true, Echo: false, Keycode: Key.F3 }:
+                _debugHudEnabled = !_debugHudEnabled;
+                LogDebug($"debug HUD {(_debugHudEnabled ? "enabled" : "disabled")}");
+                break;
+
+            case InputEventKey { Pressed: true, Echo: false, Keycode: Key.F4 }:
+                _debugOutputEnabled = !_debugOutputEnabled;
+                LogDebug(
+                    $"Godot output logging {(_debugOutputEnabled ? "enabled" : "disabled")}",
+                    forceOutput: true);
+                break;
+
             // Double-tap forward (W or Up) to start sprinting. Releasing the
             // key ends the sprint.
             case InputEventKey ek when ek.Keycode == Key.W || ek.Keycode == Key.Up:
@@ -204,6 +283,9 @@ public partial class Main : Node3D
 
     public override async void _ExitTree()
     {
+        if (Engine.IsEditorHint())
+            return;
+
         if (_client is not null) await _client.DisposeAsync();
         if (_solo   is not null) await _solo.DisposeAsync();
         if (_host   is not null) await _host.DisposeAsync();
@@ -234,8 +316,9 @@ public partial class Main : Node3D
         _menuLabel?.QueueFree();
         _menuLabel = null;
 
-        BuildScene();
+        EnsureSceneBuilt(SceneBuildMode.Runtime);
         BuildHud();
+        LogDebug($"starting {mode} mode");
 
         var transport = await ResolveTransportAsync(mode);
 
@@ -246,7 +329,7 @@ public partial class Main : Node3D
         if (_prims is not null) _prims.Bind(_client);
 
         await _client.ConnectAsync(_displayName);
-        GD.Print($"[Eden] connected. My UserId = {_client.MyUserId}");
+        LogDebug($"connected. My UserId = {_client.MyUserId}", forceOutput: true);
 
         // Own label displays the name immediately; movement fires real updates.
         if (_playerLabel is not null) _playerLabel.Text = _displayName;
@@ -275,16 +358,16 @@ public partial class Main : Node3D
         {
             case "host":
                 _host = await EdenLauncher.StartHostAsync(port);
-                GD.Print($"[Eden] hosting on port {_host.LocalEndPoint.Port}");
+                LogDebug($"hosting on port {_host.LocalEndPoint.Port}", forceOutput: true);
                 return _host.Transport;
 
             case "join":
-                GD.Print($"[Eden] joining {host}:{port}");
+                LogDebug($"joining {host}:{port}", forceOutput: true);
                 return await EdenLauncher.ConnectAsync(host, port);
 
             default:
                 _solo = EdenLauncher.StartSolo();
-                GD.Print("[Eden] solo mode");
+                LogDebug("solo mode", forceOutput: true);
                 return _solo.Transport;
         }
     }
@@ -293,18 +376,94 @@ public partial class Main : Node3D
     // World construction
     // ------------------------------------------------------------------
 
-    private void BuildScene()
+    private void QueueEditorPreviewRefresh()
     {
+        if (!Engine.IsEditorHint() || !IsInsideTree()) return;
+
+        if (_editorPreviewRefreshQueued) return;
+        _editorPreviewRefreshQueued = true;
+        CallDeferred(nameof(RefreshEditorPreview));
+    }
+
+    private void RefreshEditorPreview()
+    {
+        if (!Engine.IsEditorHint()) return;
+        _editorPreviewRefreshQueued = false;
+
+        ClearGeneratedContent();
+        if (!EditorPreviewEnabled) return;
+
+        EnsureSceneBuilt(SceneBuildMode.EditorPreview);
+        ApplyEditorPreviewWorld();
+    }
+
+    private void EnsureSceneBuilt(SceneBuildMode mode)
+    {
+        if (_generatedRoot is not null) return;
+        BuildScene(mode);
+    }
+
+    private void ApplyEditorPreviewWorld()
+    {
+        if (_world is null) return;
+
+        _world.EnsureBuilt();
+        _world.ApplyWorldState(new WorldState(
+            WorldId:         EdenId<WorldTag>.Empty,
+            Name:            EditorPreviewWorldName,
+            TimeOfDayHours:  _previewTimeOfDayHours,
+            Wind:            Eden.Shared.Math.Vector3.Zero,
+            Weather:         _previewWeather,
+            Gravity:         9.81f));
+    }
+
+    private void ClearGeneratedContent()
+    {
+        if (_generatedRoot is null && GetNodeOrNull<Node3D>(GeneratedRootName) is { } existingRoot)
+            _generatedRoot = existingRoot;
+
+        if (_generatedRoot is not null)
+        {
+            _generatedRoot.QueueFree();
+            _generatedRoot = null;
+        }
+
+        _playerCube = null;
+        _playerMesh = null;
+        _playerLabel = null;
+        _cameraRig = null;
+        _yawPivot = null;
+        _pitchPivot = null;
+        _camera = null;
+        if (_world is not null)
+            _world.DebugStateChanged -= OnWorldDebugStateChanged;
+        _world = null;
+        _prims = null;
+    }
+
+    private void BuildScene(SceneBuildMode mode)
+    {
+        _generatedRoot = new Node3D { Name = GeneratedRootName };
+        AddChild(_generatedRoot);
+
+        var sceneRoot = _generatedRoot;
+
         // WorldRenderer owns the sun + environment (sky, fog, ambient).
         // Its state is driven by the server's world clock once we bind it
         // to the ViewerClient in StartAsync.
         _world = new WorldRenderer();
-        AddChild(_world);
+        sceneRoot.AddChild(_world);
+        _world.EnsureBuilt();
+        if (mode == SceneBuildMode.Runtime)
+            _world.DebugStateChanged += OnWorldDebugStateChanged;
 
-        // PrimRenderer mirrors RemotePrims into the scene as MeshInstance3Ds.
-        // Wired to the client after ConnectAsync.
-        _prims = new PrimRenderer();
-        AddChild(_prims);
+        if (mode == SceneBuildMode.Runtime)
+        {
+            // PrimRenderer mirrors RemotePrims into the scene as MeshInstance3Ds.
+            // Wired to the client after ConnectAsync.
+            _prims = new PrimRenderer();
+            sceneRoot.AddChild(_prims);
+        }
 
         // Checkered floor — 200 m, bakes the check pattern into a
         // 128x128 image at 4 tiles across, then repeats that 25x across
@@ -324,16 +483,30 @@ public partial class Main : Node3D
             Roughness     = 0.85f,
             Metallic      = 0.0f,
         });
-        AddChild(floor);
+        sceneRoot.AddChild(floor);
 
-        // Physics collider for the floor — an infinite Y=0 plane so the
-        // player's CharacterBody3D has something to stand and land on.
-        var floorBody = new StaticBody3D();
-        floorBody.AddChild(new CollisionShape3D { Shape = new WorldBoundaryShape3D() });
-        AddChild(floorBody);
+        if (mode == SceneBuildMode.Runtime)
+        {
+            // Physics collider for the floor — an infinite Y=0 plane so the
+            // player's CharacterBody3D has something to stand and land on.
+            var floorBody = new StaticBody3D();
+            floorBody.AddChild(new CollisionShape3D { Shape = new WorldBoundaryShape3D() });
+            sceneRoot.AddChild(floorBody);
+        }
 
         // A few reference props so the world isn't two cubes in a void.
-        BuildReferenceProps();
+        BuildReferenceProps(sceneRoot, includeCollision: mode == SceneBuildMode.Runtime);
+
+        if (mode == SceneBuildMode.EditorPreview)
+        {
+            var previewAvatar = BuildAvatarMesh(new Color(0.55f, 0.55f, 0.60f));
+            previewAvatar.Position = new Vector3(0f, GroundY, 0f);
+            sceneRoot.AddChild(previewAvatar);
+
+            var previewLabel = BuildNameLabel("Preview Spawn");
+            previewAvatar.AddChild(previewLabel);
+            return;
+        }
 
         // Player body — CharacterBody3D so movement, jumping, gravity, and
         // collisions all go through Godot physics instead of hand-rolled
@@ -343,7 +516,7 @@ public partial class Main : Node3D
         _playerMesh = BuildAvatarMesh(new Color(0.55f, 0.55f, 0.60f));
         _playerCube.AddChild(_playerMesh);
         _playerCube.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
-        AddChild(_playerCube);
+        sceneRoot.AddChild(_playerCube);
 
         _playerLabel = BuildNameLabel(_displayName);
         _playerCube.AddChild(_playerLabel);
@@ -355,7 +528,7 @@ public partial class Main : Node3D
         _pitchPivot = new Node3D { Rotation = new Vector3(_pitch, 0, 0) };
         _camera     = new Camera3D { Position = new Vector3(0f, CameraHeight, _cameraDistance) };
 
-        AddChild(_cameraRig);
+        sceneRoot.AddChild(_cameraRig);
         _cameraRig.AddChild(_yawPivot);
         _yawPivot.AddChild(_pitchPivot);
         _pitchPivot.AddChild(_camera);
@@ -381,7 +554,7 @@ public partial class Main : Node3D
     /// <summary>Quick decor: a ring of pillars + a central monolith so the
     /// world has scale cues and shadow casters. Pure presentation; these
     /// live only in the viewer, not on the server.</summary>
-    private void BuildReferenceProps()
+    private void BuildReferenceProps(Node3D parent, bool includeCollision)
     {
         // Central monolith.
         var mono = new MeshInstance3D
@@ -395,8 +568,9 @@ public partial class Main : Node3D
             Roughness   = 0.6f,
             Metallic    = 0.1f,
         });
-        AttachStaticBody(mono, new BoxShape3D { Size = new Vector3(2f, 8f, 2f) });
-        AddChild(mono);
+        if (includeCollision)
+            AttachStaticBody(mono, new BoxShape3D { Size = new Vector3(2f, 8f, 2f) });
+        parent.AddChild(mono);
 
         // Ring of 8 pillars at radius 25.
         for (var i = 0; i < 8; i++)
@@ -420,8 +594,9 @@ public partial class Main : Node3D
                 AlbedoColor = new Color(0.80f, 0.78f, 0.72f),
                 Roughness   = 0.7f,
             });
-            AttachStaticBody(pillar, new CylinderShape3D { Height = 5f, Radius = 1.0f });
-            AddChild(pillar);
+            if (includeCollision)
+                AttachStaticBody(pillar, new CylinderShape3D { Height = 5f, Radius = 1.0f });
+            parent.AddChild(pillar);
         }
 
         // A couple of coloured spheres near the spawn for near-field interest.
@@ -435,8 +610,9 @@ public partial class Main : Node3D
             AlbedoColor = new Color(0.90f, 0.40f, 0.35f),
             Roughness   = 0.4f,
         });
-        AttachStaticBody(sphereA, new SphereShape3D { Radius = 1.2f });
-        AddChild(sphereA);
+        if (includeCollision)
+            AttachStaticBody(sphereA, new SphereShape3D { Radius = 1.2f });
+        parent.AddChild(sphereA);
 
         var sphereB = new MeshInstance3D
         {
@@ -448,8 +624,9 @@ public partial class Main : Node3D
             AlbedoColor = new Color(0.35f, 0.75f, 0.50f),
             Roughness   = 0.4f,
         });
-        AttachStaticBody(sphereB, new SphereShape3D { Radius = 0.9f });
-        AddChild(sphereB);
+        if (includeCollision)
+            AttachStaticBody(sphereB, new SphereShape3D { Radius = 0.9f });
+        parent.AddChild(sphereB);
     }
 
     /// <summary>Attach a <see cref="StaticBody3D"/> child with the given
@@ -510,6 +687,8 @@ public partial class Main : Node3D
 
     private void BuildHud()
     {
+        if (_hudLabel is not null) return;
+
         var hud = new CanvasLayer();
         AddChild(hud);
 
@@ -521,6 +700,18 @@ public partial class Main : Node3D
         _hudLabel.AddThemeFontSizeOverride("font_size", 16);
         _hudLabel.AddThemeColorOverride("font_color", new Color(0.95f, 0.95f, 0.95f));
         hud.AddChild(_hudLabel);
+
+        _debugHudLabel = new Label
+        {
+            Text = "",
+            Position = new Vector2(16f, 40f),
+            Size = new Vector2(960f, 260f),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        _debugHudLabel.AddThemeFontSizeOverride("font_size", 13);
+        _debugHudLabel.AddThemeColorOverride("font_color", new Color(0.80f, 0.90f, 1.00f));
+        hud.AddChild(_debugHudLabel);
     }
 
     // ------------------------------------------------------------------
@@ -636,8 +827,17 @@ public partial class Main : Node3D
         if (_hudLabel is null || _playerCube is null) return;
         var pos = _playerCube.Position;
         var motion = _isFlying ? "fly" : _isSprinting ? "sprint" : "walk";
-        _hudLabel.Text = $"Eden · {ModeLabel()} · {_displayName} · {motion} · " +
+        var worldStatus = _world?.LastApplied is { } worldState
+            ? $" · {worldState.TimeOfDayHours:F1}h · {worldState.Weather}"
+            : "";
+        _hudLabel.Text = $"Eden · {ModeLabel()} · {_displayName} · {motion}{worldStatus} · " +
                          $"({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}) · {_remote.Count} other(s)";
+
+        if (_debugHudLabel is not null)
+        {
+            _debugHudLabel.Visible = _debugHudEnabled;
+            _debugHudLabel.Text = _debugHudEnabled ? BuildDebugHudText() : "";
+        }
     }
 
     private string ModeLabel() =>
@@ -654,7 +854,7 @@ public partial class Main : Node3D
         if (!_remote.TryGetValue(state.UserId, out var avatar))
         {
             var cube = BuildAvatarMesh(ColorForUser(state.UserId));
-            AddChild(cube);
+            (_generatedRoot ?? this).AddChild(cube);
 
             var label = BuildNameLabel(state.DisplayName);
             cube.AddChild(label);
@@ -675,6 +875,73 @@ public partial class Main : Node3D
     {
         if (_remote.Remove(userId, out var avatar))
             avatar.Cube.QueueFree();
+    }
+
+    private void OnWorldDebugStateChanged(WorldRenderer.RenderDebugState state)
+    {
+        var hourBucket = Mathf.FloorToInt(state.TimeOfDayHours);
+        if (hourBucket == _lastLoggedWorldHour &&
+            _lastLoggedWeather == state.Weather &&
+            _lastLoggedNightSkyEnabled == state.NightSkyEnabled)
+        {
+            return;
+        }
+
+        _lastLoggedWorldHour = hourBucket;
+        _lastLoggedWeather = state.Weather;
+        _lastLoggedNightSkyEnabled = state.NightSkyEnabled;
+
+        LogDebug(
+            $"world {state.TimeOfDayHours:F1}h {state.Weather} daylight={state.DaylightFactor:F2} " +
+            $"sun={state.SunEnergy:F2} sky={state.SkyEnergy:F2} exposure={state.Exposure:F2} " +
+            $"fog={state.FogDensity:F4} ambientSky={state.AmbientSkyContribution:F2} " +
+            $"clouds={state.CloudCover:F2} moon={state.MoonVisibility:F2} " +
+            $"stars={state.StarVisibility:F2} nightSky={(state.NightSkyEnabled ? "on" : "off")}");
+    }
+
+    private string BuildDebugHudText()
+    {
+        var lines = new List<string>
+        {
+            $"debug F3=HUD({(_debugHudEnabled ? "on" : "off")}) F4=output({(_debugOutputEnabled ? "on" : "off")})",
+        };
+
+        if (_world?.LastDebugState is { } render)
+        {
+            lines.Add(
+                $"render daylight={render.DaylightFactor:F2} sun={render.SunEnergy:F2} " +
+                $"sky={render.SkyEnergy:F2} nightSky={(render.NightSkyEnabled ? "on" : "off")}");
+            lines.Add(
+                $"env exposure={render.Exposure:F2} fog={render.FogDensity:F4} " +
+                $"ambientSky={render.AmbientSkyContribution:F2} ambient={render.AmbientEnergy:F2}");
+            lines.Add(
+                $"sky clouds={render.CloudCover:F2} moon={render.MoonVisibility:F2} " +
+                $"stars={render.StarVisibility:F2}");
+        }
+        else
+        {
+            lines.Add("render waiting for world state...");
+        }
+
+        if (_debugMessages.Count > 0)
+        {
+            lines.Add("log:");
+            foreach (var line in _debugMessages)
+                lines.Add(line);
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    private void LogDebug(string message, bool forceOutput = false)
+    {
+        var line = $"{DateTime.Now:HH:mm:ss} {message}";
+        if (_debugMessages.Count >= MaxDebugMessages)
+            _debugMessages.Dequeue();
+        _debugMessages.Enqueue(line);
+
+        if (forceOutput || _debugOutputEnabled)
+            GD.Print($"[Eden][Debug] {line}");
     }
 
     private readonly record struct RemoteAvatar(MeshInstance3D Cube, Label3D Label);

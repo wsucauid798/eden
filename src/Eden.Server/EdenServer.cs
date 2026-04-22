@@ -63,7 +63,7 @@ public sealed class EdenServer : IAsyncDisposable
         _behaviorHost  = new BehaviorHost(_loggerFactory);
         _physics       = new PhysicsWorld(_loggerFactory.CreateLogger<PhysicsWorld>());
 
-        var cfg = worldConfig ?? new WorldConfig();
+        var cfg = worldConfig ?? WorldConfig.Default;
         _dayLengthSeconds = cfg.DayLengthSeconds > 0 ? cfg.DayLengthSeconds : 24f * 60f;
         _world = new WorldState(
             WorldId:        worldId,
