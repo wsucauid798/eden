@@ -11,5 +11,5 @@ public static class EdenVersion
     public const string Release = "0.0.1-alpha";
 
     /// <summary>Semver-style version string for the wire protocol.</summary>
-    public const string WireProtocol = "0.1";
+    public const string WireProtocol = "0.2";
 }

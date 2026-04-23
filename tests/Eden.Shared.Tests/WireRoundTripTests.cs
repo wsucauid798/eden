@@ -2,6 +2,7 @@ using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
 using Eden.Shared.Wire;
+using Eden.Shared.World;
 
 namespace Eden.Shared.Tests;
 
@@ -69,6 +70,54 @@ public class WireRoundTripTests
         Assert.Equal(state, back);
         Assert.True(back.Flags.HasFlag(PrimFlags.Physical));
         Assert.True(back.Flags.HasFlag(PrimFlags.Locked));
+    }
+
+    [Fact]
+    public void TerrainState_RoundTrip()
+    {
+        var state = new TerrainState(
+            TerrainKind.Flat,
+            BaseHeightY: 0f,
+            RegionSizeMetres: 256f,
+            WaterHeightY: 20f,
+            WaterEnabled: true);
+
+        var bytes = WireFormat.Serialize(state);
+        var back = WireFormat.Deserialize<TerrainState>(bytes);
+
+        Assert.Equal(state, back);
+    }
+
+    [Fact]
+    public void EnvironmentState_RoundTrip()
+    {
+        var state = EnvironmentState.FromWeather(Weather.Cloudy);
+
+        var bytes = WireFormat.Serialize(state);
+        var back = WireFormat.Deserialize<EnvironmentState>(bytes);
+
+        Assert.Equal(state, back);
+    }
+
+    [Fact]
+    public void WorldState_RoundTrip_Includes_Terrain_And_Environment()
+    {
+        var state = new WorldState(
+            WorldId: EdenId<WorldTag>.New(),
+            Name: "Contract World",
+            TimeOfDayHours: 14.5f,
+            Wind: new Vector3(1f, 0f, 2f),
+            Weather: Weather.Rain,
+            Gravity: 9.81f,
+            Terrain: TerrainState.FlatDefault,
+            Environment: EnvironmentState.FromWeather(Weather.Rain));
+
+        var bytes = WireFormat.Serialize(state);
+        var back = WireFormat.Deserialize<WorldState>(bytes);
+
+        Assert.Equal(state, back);
+        Assert.Equal(TerrainKind.Flat, back.Terrain.Kind);
+        Assert.Equal(EnvironmentProfile.Rain, back.Environment.Profile);
     }
 
     [Fact]

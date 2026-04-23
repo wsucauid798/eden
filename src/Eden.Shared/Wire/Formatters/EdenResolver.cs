@@ -1,6 +1,7 @@
 using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
+using Eden.Shared.World;
 using Eden.Shared.Wire.Messages;
 using MessagePack;
 using MessagePack.Formatters;
@@ -38,6 +39,8 @@ public sealed class EdenResolver : IFormatterResolver
                 t == typeof(Quaternion)   ? QuaternionFormatter.Instance :
                 t == typeof(Color)        ? ColorFormatter.Instance :
                 t == typeof(Transform)    ? TransformFormatter.Instance :
+                t == typeof(TerrainState) ? TerrainStateFormatter.Instance :
+                t == typeof(EnvironmentState) ? EnvironmentStateFormatter.Instance :
                 t == typeof(AvatarState)  ? AvatarStateFormatter.Instance :
                 t == typeof(PrimState)    ? PrimStateFormatter.Instance :
                 t == typeof(ClientHello)  ? ClientHelloFormatter.Instance :

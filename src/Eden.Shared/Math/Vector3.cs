@@ -1,9 +1,9 @@
 namespace Eden.Shared.Math;
 
 /// <summary>
-/// A 3-component single-precision vector. Axis convention is declared at
-/// each call site; this type carries no opinion about up-direction or
-/// handedness.
+/// A 3-component single-precision vector.
+/// Eden world-space transforms use metres with Y as the up axis; see
+/// <see cref="Eden.Shared.World.WorldConventions"/> for the domain contract.
 /// </summary>
 public readonly record struct Vector3(float X, float Y, float Z)
 {

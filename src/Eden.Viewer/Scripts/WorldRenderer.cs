@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Godot;
 using Eden.Client;
 using Eden.Shared.Entities;
+using Eden.Shared.World;
 
 namespace Eden.Viewer;
 
@@ -187,6 +188,7 @@ public partial class WorldRenderer : Node3D
 		EnsureBuilt();
 
 		var daylight = DaylightFactor(state.TimeOfDayHours);
+		var environment = state.Environment.NormalizedFor(state.Weather);
 
 		if (_sun is not null)
 		{
@@ -194,17 +196,17 @@ public partial class WorldRenderer : Node3D
 				x: SunMath.SunRotationX(state.TimeOfDayHours),
 				y: DefaultSunYaw,
 				z: 0f);
-			_sun.LightEnergy = SunEnergyFor(daylight, state.Weather);
+			_sun.LightEnergy = SunEnergyFor(daylight, environment);
 			_sun.LightColor = SunLightColorFor(daylight, state.Weather);
 		}
 
 		if (_worldEnv?.Environment is { } env)
-			ApplyAtmosphere(env, state.Weather, daylight);
+			ApplyAtmosphere(env, state.Weather, environment, daylight);
 
-		UpdateSkyVisuals(state, daylight);
+		UpdateSkyVisuals(state, environment, daylight);
 
 		_lastApplied = state;
-		_lastDebugState = CreateDebugState(state, daylight);
+		_lastDebugState = CreateDebugState(state, environment, daylight);
 		DebugStateChanged?.Invoke(_lastDebugState.Value);
 	}
 
@@ -305,7 +307,11 @@ public partial class WorldRenderer : Node3D
 		_skyAnchor.GlobalPosition = camera?.GlobalPosition ?? GlobalPosition;
 	}
 
-	private void ApplyAtmosphere(Godot.Environment env, Weather weather, float daylight)
+	private void ApplyAtmosphere(
+		Godot.Environment env,
+		Weather weather,
+		EnvironmentState environment,
+		float daylight)
 	{
 		if (_skyMaterial is null) return;
 
@@ -317,24 +323,23 @@ public partial class WorldRenderer : Node3D
 		_skyMaterial.MieEccentricity = 0.80f;
 		_skyMaterial.GroundColor = GroundColorFor(weather).Darkened((1f - daylight) * 0.52f);
 		_skyMaterial.SunDiskScale = SunDiskScaleFor(weather);
-		_skyMaterial.EnergyMultiplier = SkyEnergyFor(daylight, weather);
+		_skyMaterial.EnergyMultiplier = SkyEnergyFor(daylight, environment);
 
 		env.AmbientLightSkyContribution = AmbientSkyContributionFor(daylight, weather);
 		env.AmbientLightColor = NightAmbientColor().Lerp(AmbientFillFor(weather), daylight);
-		env.AmbientLightEnergy = AmbientFillEnergyFor(daylight, weather);
+		env.AmbientLightEnergy = AmbientFillEnergyFor(daylight, environment);
 		env.TonemapExposure = ExposureFor(daylight, weather);
-		env.FogDensity = FogDensityFor(weather, daylight);
+		env.FogDensity = FogDensityFor(environment, daylight);
 		env.FogLightColor = FogColorFor(daylight, weather);
-		env.FogAerialPerspective = FogAerialPerspectiveFor(weather);
+		env.FogAerialPerspective = FogAerialPerspectiveFor(environment);
 	}
 
-	private void UpdateSkyVisuals(WorldState state, float daylight)
+	private void UpdateSkyVisuals(WorldState state, EnvironmentState environment, float daylight)
 	{
 		var sunDirection = SunDirectionFor(state.TimeOfDayHours);
 		var moonDirection = -sunDirection;
-		var cloudCover = CloudCoverFor(state.Weather);
-		var starVisibility = StarVisibilityFor(daylight, state.Weather);
-		var moonVisibility = MoonVisibilityFor(daylight, state.Weather);
+		var starVisibility = StarVisibilityFor(daylight, environment);
+		var moonVisibility = MoonVisibilityFor(daylight, environment);
 
 		if (_sunDisc is not null)
 		{
@@ -370,7 +375,7 @@ public partial class WorldRenderer : Node3D
 		if (_cloudLayerMaterial is not null)
 		{
 			var tint = CloudTintFor(state.Weather, daylight);
-			var alpha = CloudLayerOpacityFor(state.Weather, daylight);
+			var alpha = CloudLayerOpacityFor(environment, daylight);
 			_cloudLayerMaterial.AlbedoColor = new Color(tint.R, tint.G, tint.B, alpha);
 			if (_cloudLayer is not null)
 				_cloudLayer.Rotation = new Vector3(Mathf.DegToRad(7f), state.TimeOfDayHours * 0.018f, 0f);
@@ -542,19 +547,8 @@ public partial class WorldRenderer : Node3D
 		return (Basis.FromEuler(rotation) * Vector3.Back).Normalized();
 	}
 
-	private static float SunEnergyFor(float daylight, Weather weather)
-	{
-		var noonStrength = weather switch
-		{
-			Weather.Clear => 2.8f,
-			Weather.Cloudy => 2.0f,
-			Weather.Rain => 1.2f,
-			Weather.Snow => 2.3f,
-			_ => 2.6f,
-		};
-
-		return Mathf.Lerp(0.05f, noonStrength, daylight);
-	}
+	private static float SunEnergyFor(float daylight, EnvironmentState environment) =>
+		Mathf.Lerp(0.05f, environment.SunIntensity, daylight);
 
 	private static Color SunLightColorFor(float daylight, Weather weather)
 	{
@@ -592,19 +586,8 @@ public partial class WorldRenderer : Node3D
 		_ => 26f,
 	};
 
-	private static float SkyEnergyFor(float daylight, Weather weather)
-	{
-		var dayValue = weather switch
-		{
-			Weather.Clear => 0.92f,
-			Weather.Cloudy => 0.80f,
-			Weather.Rain => 0.64f,
-			Weather.Snow => 0.88f,
-			_ => 0.86f,
-		};
-
-		return Mathf.Lerp(0.18f, dayValue, daylight);
-	}
+	private static float SkyEnergyFor(float daylight, EnvironmentState environment) =>
+		Mathf.Lerp(0.18f, environment.SkyBrightness, daylight);
 
 	private static float ExposureFor(float daylight, Weather weather)
 	{
@@ -620,19 +603,8 @@ public partial class WorldRenderer : Node3D
 		return Mathf.Lerp(0.70f, baseExposure, daylight);
 	}
 
-	private static float FogDensityFor(Weather weather, float daylight)
-	{
-		var baseDensity = weather switch
-		{
-			Weather.Clear => 0.00018f,
-			Weather.Cloudy => 0.0009f,
-			Weather.Rain => 0.0028f,
-			Weather.Snow => 0.0015f,
-			_ => 0.0006f,
-		};
-
-		return baseDensity + (1f - daylight) * 0.00025f;
-	}
+	private static float FogDensityFor(EnvironmentState environment, float daylight) =>
+		environment.FogDensity + (1f - daylight) * 0.00025f;
 
 	private static Color FogColorFor(float daylight, Weather weather)
 	{
@@ -649,14 +621,8 @@ public partial class WorldRenderer : Node3D
 		return night.Lerp(day, daylight);
 	}
 
-	private static float FogAerialPerspectiveFor(Weather weather) => weather switch
-	{
-		Weather.Clear => 0.08f,
-		Weather.Cloudy => 0.12f,
-		Weather.Rain => 0.08f,
-		Weather.Snow => 0.10f,
-		_ => 0.10f,
-	};
+	private static float FogAerialPerspectiveFor(EnvironmentState environment) =>
+		Mathf.Lerp(0.04f, 0.16f, environment.Haze);
 
 	private static float AmbientSkyContributionFor(float daylight, Weather weather)
 	{
@@ -681,19 +647,8 @@ public partial class WorldRenderer : Node3D
 		_ => new Color(0.44f, 0.48f, 0.54f),
 	};
 
-	private static float AmbientFillEnergyFor(float daylight, Weather weather)
-	{
-		var dayValue = weather switch
-		{
-			Weather.Clear => 0.14f,
-			Weather.Cloudy => 0.20f,
-			Weather.Rain => 0.22f,
-			Weather.Snow => 0.18f,
-			_ => 0.18f,
-		};
-
-		return Mathf.Lerp(0.06f, dayValue, daylight);
-	}
+	private static float AmbientFillEnergyFor(float daylight, EnvironmentState environment) =>
+		Mathf.Lerp(0.06f, environment.AmbientBrightness, daylight);
 
 	private static float TurbidityFor(Weather weather) => weather switch
 	{
@@ -758,15 +713,6 @@ public partial class WorldRenderer : Node3D
 		_ => new Color(0.38f, 0.37f, 0.35f),
 	};
 
-	private static float CloudCoverFor(Weather weather) => weather switch
-	{
-		Weather.Clear => 0.26f,
-		Weather.Cloudy => 0.58f,
-		Weather.Rain => 0.88f,
-		Weather.Snow => 0.72f,
-		_ => 0.30f,
-	};
-
 	private static Color CloudTintFor(Weather weather, float daylight)
 	{
 		var night = new Color(0.14f, 0.16f, 0.22f);
@@ -782,48 +728,22 @@ public partial class WorldRenderer : Node3D
 		return night.Lerp(day, daylight);
 	}
 
-	private static float CloudLayerOpacityFor(Weather weather, float daylight)
+	private static float CloudLayerOpacityFor(EnvironmentState environment, float daylight)
 	{
-		var weatherOpacity = weather switch
-		{
-			Weather.Clear => 0.34f,
-			Weather.Cloudy => 0.56f,
-			Weather.Rain => 0.70f,
-			Weather.Snow => 0.62f,
-			_ => 0.38f,
-		};
-
-		return weatherOpacity * Mathf.Lerp(0.42f, 1.00f, daylight);
+		var opacity = Mathf.Lerp(0.14f, 0.74f, environment.CloudCover);
+		return opacity * Mathf.Lerp(0.42f, 1.00f, daylight);
 	}
 
-	private static float StarVisibilityFor(float daylight, Weather weather)
+	private static float StarVisibilityFor(float daylight, EnvironmentState environment)
 	{
 		var nightFactor = 1f - SmoothRange(daylight, 0.05f, 0.28f);
-		var weatherFactor = weather switch
-		{
-			Weather.Clear => 1.00f,
-			Weather.Cloudy => 0.45f,
-			Weather.Rain => 0.10f,
-			Weather.Snow => 0.24f,
-			_ => 0.80f,
-		};
-
-		return nightFactor * weatherFactor;
+		return nightFactor * environment.StarVisibility;
 	}
 
-	private static float MoonVisibilityFor(float daylight, Weather weather)
+	private static float MoonVisibilityFor(float daylight, EnvironmentState environment)
 	{
 		var twilightFactor = 1f - SmoothRange(daylight, 0.08f, 0.42f);
-		var weatherFactor = weather switch
-		{
-			Weather.Clear => 0.92f,
-			Weather.Cloudy => 0.58f,
-			Weather.Rain => 0.18f,
-			Weather.Snow => 0.36f,
-			_ => 0.76f,
-		};
-
-		return twilightFactor * weatherFactor;
+		return twilightFactor * environment.MoonVisibility;
 	}
 
 	private static Color NightBaseColor() => new(0.05f, 0.09f, 0.18f);
@@ -987,7 +907,10 @@ public partial class WorldRenderer : Node3D
 		}
 	}
 
-	private RenderDebugState CreateDebugState(WorldState state, float daylight)
+	private RenderDebugState CreateDebugState(
+		WorldState state,
+		EnvironmentState environment,
+		float daylight)
 	{
 		var env = _worldEnv?.Environment;
 		return new RenderDebugState(
@@ -1000,9 +923,9 @@ public partial class WorldRenderer : Node3D
 			FogDensity: env?.FogDensity ?? 0f,
 			AmbientSkyContribution: env?.AmbientLightSkyContribution ?? 0f,
 			AmbientEnergy: env?.AmbientLightEnergy ?? 0f,
-			NightSkyEnabled: StarVisibilityFor(daylight, state.Weather) > 0.05f,
-			CloudCover: CloudCoverFor(state.Weather),
-			StarVisibility: StarVisibilityFor(daylight, state.Weather),
-			MoonVisibility: MoonVisibilityFor(daylight, state.Weather));
+			NightSkyEnabled: StarVisibilityFor(daylight, environment) > 0.05f,
+			CloudCover: environment.CloudCover,
+			StarVisibility: StarVisibilityFor(daylight, environment),
+			MoonVisibility: MoonVisibilityFor(daylight, environment));
 	}
 }

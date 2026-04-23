@@ -8,6 +8,7 @@ using Eden.Launcher;
 using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Transport;
+using Eden.Shared.World;
 
 // `Vector3` in this file means Godot.Vector3. Eden's wire-format math types
 // live in Eden.Shared.Math and are fully-qualified at the send/receive boundary.
@@ -44,12 +45,12 @@ public partial class Main : Node3D
     private const float  JumpVelocity     = 6f;
     private const float  Gravity          = 18f;
     private const float  FlySpeed         = 6f;
-    private const float  GroundY          = 0.5f;
     private const float  MouseSensitivity = 0.003f;
-    private const float  CameraDistance   = 6f;
-    private const float  CameraHeight     = 2.2f;
-    private const float  MinCameraDistance = 1.5f;
-    private const float  MaxCameraDistance = 20f;
+    private const float  CameraDistance   = 10f;
+    private const float  CameraHeight     = 3.0f;
+    private const float  MinCameraDistance = 2.0f;
+    private const float  MaxCameraDistance = 40f;
+    private const float  MinCameraGroundClearance = 0.25f;
     private const float  ZoomStep         = 0.6f;
     private const double SendHz           = 20.0;
     private const int    DefaultPort      = 5001;
@@ -414,7 +415,9 @@ public partial class Main : Node3D
             TimeOfDayHours:  _previewTimeOfDayHours,
             Wind:            Eden.Shared.Math.Vector3.Zero,
             Weather:         _previewWeather,
-            Gravity:         9.81f));
+            Gravity:         9.81f,
+            Terrain:         TerrainState.FlatDefault,
+            Environment:     EnvironmentState.FromWeather(_previewWeather)));
     }
 
     private void ClearGeneratedContent()
@@ -465,21 +468,32 @@ public partial class Main : Node3D
             sceneRoot.AddChild(_prims);
         }
 
-        // Checkered floor — 200 m, bakes the check pattern into a
-        // 128x128 image at 4 tiles across, then repeats that 25x across
-        // the floor (~5 m per check).
+        // Ground contract: the walkable world floor is Y=0. The visible
+        // checkered plane is intentionally very large so it matches the
+        // infinite physics floor used for this early viewer prototype.
+        var groundTextureRepeats = WorldConventions.FlatTerrainPreviewSizeMetres /
+                                   (WorldConventions.FlatTerrainCheckerSizeMetres *
+                                    WorldConventions.FlatTerrainChecksPerTextureSide);
         var floor = new MeshInstance3D
         {
-            Mesh     = new PlaneMesh { Size = new Vector2(200f, 200f) },
-            Position = Vector3.Zero,
+            Mesh     = new PlaneMesh
+            {
+                Size = new Vector2(
+                    WorldConventions.FlatTerrainPreviewSizeMetres,
+                    WorldConventions.FlatTerrainPreviewSizeMetres),
+            },
+            Position = new Vector3(0f, WorldConventions.DefaultGroundPlaneY, 0f),
         };
         floor.SetSurfaceOverrideMaterial(0, new StandardMaterial3D
         {
-            AlbedoTexture = BuildCheckerTexture(128, tilesPerSide: 4,
+            AlbedoTexture = BuildCheckerTexture(
+                128,
+                tilesPerSide: WorldConventions.FlatTerrainChecksPerTextureSide,
                 light: new Color(0.70f, 0.70f, 0.73f),
                 dark:  new Color(0.52f, 0.52f, 0.55f)),
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
-            Uv1Scale      = new Vector3(25f, 25f, 1f),
+            Uv1Scale      = new Vector3(groundTextureRepeats, groundTextureRepeats, 1f),
+            CullMode      = BaseMaterial3D.CullModeEnum.Disabled,
             Roughness     = 0.85f,
             Metallic      = 0.0f,
         });
@@ -489,7 +503,10 @@ public partial class Main : Node3D
         {
             // Physics collider for the floor — an infinite Y=0 plane so the
             // player's CharacterBody3D has something to stand and land on.
-            var floorBody = new StaticBody3D();
+            var floorBody = new StaticBody3D
+            {
+                Position = new Vector3(0f, WorldConventions.DefaultGroundPlaneY, 0f),
+            };
             floorBody.AddChild(new CollisionShape3D { Shape = new WorldBoundaryShape3D() });
             sceneRoot.AddChild(floorBody);
         }
@@ -499,8 +516,13 @@ public partial class Main : Node3D
 
         if (mode == SceneBuildMode.EditorPreview)
         {
-            var previewAvatar = BuildAvatarMesh(new Color(0.55f, 0.55f, 0.60f));
-            previewAvatar.Position = new Vector3(0f, GroundY, 0f);
+            var previewAvatar = new Node3D
+            {
+                Position = new Vector3(0f, WorldConventions.DefaultGroundPlaneY, 0f),
+            };
+            var previewMesh = BuildAvatarMesh(new Color(0.55f, 0.55f, 0.60f));
+            previewMesh.Position = new Vector3(0f, WorldConventions.DefaultAvatarCentreOffsetY, 0f);
+            previewAvatar.AddChild(previewMesh);
             sceneRoot.AddChild(previewAvatar);
 
             var previewLabel = BuildNameLabel("Preview Spawn");
@@ -510,12 +532,23 @@ public partial class Main : Node3D
 
         // Player body — CharacterBody3D so movement, jumping, gravity, and
         // collisions all go through Godot physics instead of hand-rolled
-        // position math. Visible cube and box collider are both children;
-        // MoveAndSlide is driven from _PhysicsProcess.
-        _playerCube = new CharacterBody3D { Position = new Vector3(0f, GroundY, 0f) };
+        // position math. The body origin is at the avatar's feet, so a
+        // grounded avatar has Position.Y == 0.
+        _playerCube = new CharacterBody3D
+        {
+            Position = new Vector3(0f, WorldConventions.DefaultGroundPlaneY, 0f),
+        };
         _playerMesh = BuildAvatarMesh(new Color(0.55f, 0.55f, 0.60f));
+        _playerMesh.Position = new Vector3(0f, WorldConventions.DefaultAvatarCentreOffsetY, 0f);
         _playerCube.AddChild(_playerMesh);
-        _playerCube.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
+        _playerCube.AddChild(new CollisionShape3D
+        {
+            Position = new Vector3(0f, WorldConventions.DefaultAvatarCentreOffsetY, 0f),
+            Shape = new BoxShape3D
+            {
+                Size = new Vector3(1f, WorldConventions.DefaultAvatarHeightMetres, 1f),
+            },
+        });
         sceneRoot.AddChild(_playerCube);
 
         _playerLabel = BuildNameLabel(_displayName);
@@ -788,6 +821,13 @@ public partial class Main : Node3D
     {
         if (_cameraRig is null || _playerCube is null) return;
         _cameraRig.Position = _playerCube.Position;
+
+        if (_camera is null) return;
+
+        var minCameraY = WorldConventions.DefaultGroundPlaneY + MinCameraGroundClearance;
+        var cameraY = _camera.GlobalPosition.Y;
+        if (cameraY < minCameraY)
+            _cameraRig.GlobalPosition += Vector3.Up * (minCameraY - cameraY);
     }
 
     private void ApplyPendingRemoteEvents()
@@ -853,20 +893,23 @@ public partial class Main : Node3D
     {
         if (!_remote.TryGetValue(state.UserId, out var avatar))
         {
+            var root = new Node3D();
             var cube = BuildAvatarMesh(ColorForUser(state.UserId));
-            (_generatedRoot ?? this).AddChild(cube);
+            cube.Position = new Vector3(0f, WorldConventions.DefaultAvatarCentreOffsetY, 0f);
+            root.AddChild(cube);
+            (_generatedRoot ?? this).AddChild(root);
 
             var label = BuildNameLabel(state.DisplayName);
-            cube.AddChild(label);
+            root.AddChild(label);
 
-            avatar = new RemoteAvatar(cube, label);
+            avatar = new RemoteAvatar(root, label);
             _remote[state.UserId] = avatar;
         }
 
         var p = state.Transform.Position;
         var r = state.Transform.Rotation;
-        avatar.Cube.Position   = new Vector3(p.X, p.Y + 0.5f, p.Z);
-        avatar.Cube.Quaternion = new Quaternion(r.X, r.Y, r.Z, r.W);
+        avatar.Root.Position   = new Vector3(p.X, p.Y, p.Z);
+        avatar.Root.Quaternion = new Quaternion(r.X, r.Y, r.Z, r.W);
         if (!string.IsNullOrEmpty(state.DisplayName))
             avatar.Label.Text = state.DisplayName;
     }
@@ -874,7 +917,7 @@ public partial class Main : Node3D
     private void RemoveRemoteAvatar(EdenId<UserTag> userId)
     {
         if (_remote.Remove(userId, out var avatar))
-            avatar.Cube.QueueFree();
+            avatar.Root.QueueFree();
     }
 
     private void OnWorldDebugStateChanged(WorldRenderer.RenderDebugState state)
@@ -944,5 +987,5 @@ public partial class Main : Node3D
             GD.Print($"[Eden][Debug] {line}");
     }
 
-    private readonly record struct RemoteAvatar(MeshInstance3D Cube, Label3D Label);
+    private readonly record struct RemoteAvatar(Node3D Root, Label3D Label);
 }

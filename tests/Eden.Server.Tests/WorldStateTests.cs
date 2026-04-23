@@ -1,6 +1,7 @@
 using Eden.Client;
 using Eden.Launcher;
 using Eden.Shared.Entities;
+using Eden.Shared.World;
 
 namespace Eden.Server.Tests;
 
@@ -25,6 +26,9 @@ public class WorldStateTests
         var state = host.Server.WorldSnapshot;
         Assert.Equal("Testland",      state.Name);
         Assert.Equal(Weather.Cloudy,  state.Weather);
+        Assert.Equal(TerrainKind.Flat, state.Terrain.Kind);
+        Assert.Equal(EnvironmentProfile.Cloudy, state.Environment.Profile);
+        Assert.Equal(EnvironmentState.FromWeather(Weather.Cloudy).CloudCover, state.Environment.CloudCover);
         // TimeOfDayHours may have ticked once by the time we look — allow a small delta.
         Assert.InRange(state.TimeOfDayHours, 12f, 12.5f);
     }
@@ -58,6 +62,8 @@ public class WorldStateTests
         Assert.True(seen, "Viewer never received initial WorldStateUpdate.");
         Assert.Equal("Arrival World", alice.RemoteWorldState!.Value.Name);
         Assert.Equal(Weather.Rain,    alice.RemoteWorldState.Value.Weather);
+        Assert.Equal(EnvironmentProfile.Rain, alice.RemoteWorldState.Value.Environment.Profile);
+        Assert.Equal(TerrainKind.Flat, alice.RemoteWorldState.Value.Terrain.Kind);
     }
 
     [Fact]

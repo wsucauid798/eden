@@ -65,13 +65,17 @@ public sealed class EdenServer : IAsyncDisposable
 
         var cfg = worldConfig ?? WorldConfig.Default;
         _dayLengthSeconds = cfg.DayLengthSeconds > 0 ? cfg.DayLengthSeconds : 24f * 60f;
+        var terrain = cfg.InitialTerrain.Normalized();
+        var environment = cfg.InitialEnvironment.NormalizedFor(cfg.InitialWeather);
         _world = new WorldState(
             WorldId:        worldId,
             Name:           cfg.Name,
             TimeOfDayHours: cfg.StartHoursOfDay,
             Wind:           cfg.InitialWind,
             Weather:        cfg.InitialWeather,
-            Gravity:        cfg.Gravity);
+            Gravity:        cfg.Gravity,
+            Terrain:        terrain,
+            Environment:    environment);
         _worldContext   = new ServerWorldContext(() => WorldSnapshot);
 
         _physicsLoop    = Task.Run(() => PhysicsLoopAsync(_shutdownCts.Token));

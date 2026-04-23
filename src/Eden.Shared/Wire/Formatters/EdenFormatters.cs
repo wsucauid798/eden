@@ -2,6 +2,7 @@ using System.Buffers;
 using Eden.Shared.Entities;
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
+using Eden.Shared.World;
 using Eden.Shared.Wire.Messages;
 using MessagePack;
 using MessagePack.Formatters;
@@ -93,6 +94,81 @@ public sealed class TransformFormatter : IMessagePackFormatter<Transform>
         var rot = QuaternionFormatter.Instance.Deserialize(ref reader, options);
         return new Transform(pos, rot);
     }
+}
+
+public sealed class TerrainStateFormatter : IMessagePackFormatter<TerrainState>
+{
+    public static readonly TerrainStateFormatter Instance = new();
+
+    public void Serialize(ref MessagePackWriter writer, TerrainState value, MessagePackSerializerOptions options)
+    {
+        writer.WriteArrayHeader(5);
+        writer.Write((byte)value.Kind);
+        writer.Write(value.BaseHeightY);
+        writer.Write(value.RegionSizeMetres);
+        writer.Write(value.WaterHeightY);
+        writer.Write(value.WaterEnabled);
+    }
+
+    public TerrainState Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    {
+        var count = reader.ReadArrayHeader();
+        if (count != 5)
+            throw new MessagePackSerializationException($"TerrainState expects 5 elements, got {count}");
+        return new TerrainState(
+            (TerrainKind)reader.ReadByte(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadBoolean()).Normalized();
+    }
+}
+
+public sealed class EnvironmentStateFormatter : IMessagePackFormatter<EnvironmentState>
+{
+    public static readonly EnvironmentStateFormatter Instance = new();
+
+    public void Serialize(ref MessagePackWriter writer, EnvironmentState value, MessagePackSerializerOptions options)
+    {
+        writer.WriteArrayHeader(10);
+        writer.Write((byte)value.Profile);
+        writer.Write(value.CloudCover);
+        writer.Write(value.Haze);
+        writer.Write(value.FogDensity);
+        writer.Write(value.PrecipitationIntensity);
+        writer.Write(value.SunIntensity);
+        writer.Write(value.SkyBrightness);
+        writer.Write(value.AmbientBrightness);
+        writer.Write(value.MoonVisibility);
+        writer.Write(value.StarVisibility);
+    }
+
+    public EnvironmentState Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    {
+        var count = reader.ReadArrayHeader();
+        if (count != 10)
+            throw new MessagePackSerializationException($"EnvironmentState expects 10 elements, got {count}");
+        var state = new EnvironmentState(
+            (EnvironmentProfile)reader.ReadByte(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadSingle(),
+            reader.ReadSingle());
+        return state.NormalizedFor(ProfileToWeather(state.Profile));
+    }
+
+    private static Weather ProfileToWeather(EnvironmentProfile profile) => profile switch
+    {
+        EnvironmentProfile.Cloudy => Weather.Cloudy,
+        EnvironmentProfile.Rain => Weather.Rain,
+        EnvironmentProfile.Snow => Weather.Snow,
+        _ => Weather.Clear,
+    };
 }
 
 public sealed class EdenIdFormatter<TTag> : IMessagePackFormatter<EdenId<TTag>>
@@ -336,27 +412,31 @@ public sealed class WorldStateFormatter : IMessagePackFormatter<WorldState>
 
     public void Serialize(ref MessagePackWriter writer, WorldState value, MessagePackSerializerOptions options)
     {
-        writer.WriteArrayHeader(6);
+        writer.WriteArrayHeader(8);
         EdenIdFormatter<WorldTag>.Instance.Serialize(ref writer, value.WorldId, options);
         writer.Write(value.Name);
         writer.Write(value.TimeOfDayHours);
         Vector3Formatter.Instance.Serialize(ref writer, value.Wind, options);
         writer.Write((byte)value.Weather);
         writer.Write(value.Gravity);
+        TerrainStateFormatter.Instance.Serialize(ref writer, value.Terrain, options);
+        EnvironmentStateFormatter.Instance.Serialize(ref writer, value.Environment, options);
     }
 
     public WorldState Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
     {
         var count = reader.ReadArrayHeader();
-        if (count != 6)
-            throw new MessagePackSerializationException($"WorldState expects 6 elements, got {count}");
+        if (count != 8)
+            throw new MessagePackSerializationException($"WorldState expects 8 elements, got {count}");
         return new WorldState(
             EdenIdFormatter<WorldTag>.Instance.Deserialize(ref reader, options),
             reader.ReadString() ?? string.Empty,
             reader.ReadSingle(),
             Vector3Formatter.Instance.Deserialize(ref reader, options),
             (Weather)reader.ReadByte(),
-            reader.ReadSingle());
+            reader.ReadSingle(),
+            TerrainStateFormatter.Instance.Deserialize(ref reader, options),
+            EnvironmentStateFormatter.Instance.Deserialize(ref reader, options));
     }
 }
 

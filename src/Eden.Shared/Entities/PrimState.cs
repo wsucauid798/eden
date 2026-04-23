@@ -5,8 +5,10 @@ namespace Eden.Shared.Entities;
 
 /// <summary>
 /// A wire-ready snapshot of a single prim. Sent from server to viewers that
-/// can see the prim. Scale is carried here (unlike <see cref="Transform"/>)
-/// because prim geometry is scaled independently of the pose.
+/// can see the prim. <see cref="Transform.Position"/> is the prim centre in
+/// Eden world coordinates. Scale is carried here (unlike
+/// <see cref="Transform"/>) because prim geometry is scaled independently of
+/// the pose.
 /// </summary>
 public readonly record struct PrimState(
     EdenId<PrimTag>  Id,

@@ -1,5 +1,6 @@
 using Eden.Shared.Ids;
 using Eden.Shared.Math;
+using Eden.Shared.World;
 
 namespace Eden.Shared.Entities;
 
@@ -8,7 +9,8 @@ namespace Eden.Shared.Entities;
 /// (time-of-day, scripted weather changes, scripted wind changes), and
 /// broadcasts updates to every session. Scripts read the current snapshot
 /// via <c>IWorldContext.World</c>; viewers mirror it to drive lighting,
-/// sky, weather particles, cloth/grass bending.
+/// sky, weather particles, cloth/grass bending. Empty flat worlds use the
+/// default terrain datum defined by <see cref="Eden.Shared.World.WorldConventions"/>.
 /// </summary>
 public readonly record struct WorldState(
     EdenId<WorldTag> WorldId,
@@ -16,7 +18,9 @@ public readonly record struct WorldState(
     float            TimeOfDayHours,   // 0..24, wraps
     Vector3          Wind,             // metres per second
     Weather          Weather,
-    float            Gravity);         // m/s² along -Y; Jolt default is 9.81
+    float            Gravity,          // m/s² along -Y; Jolt default is 9.81
+    TerrainState     Terrain,
+    EnvironmentState Environment);
 
 /// <summary>
 /// Broad weather categories. Viewers turn these into particles + sky tint +
@@ -41,7 +45,9 @@ public readonly record struct WorldConfig(
     Vector3 InitialWind      = default,      // (0,0,0)
     Weather InitialWeather   = Weather.Clear,
     float   Gravity          = 9.81f,
-    float   StartHoursOfDay  = 8f)           // start at 08:00
+    float   StartHoursOfDay  = 8f,           // start at 08:00
+    TerrainState InitialTerrain = default,
+    EnvironmentState InitialEnvironment = default)
 {
     /// <summary>Canonical defaults for a brand-new world. Avoid relying on
     /// the parameterless struct constructor, which zero-initializes values
@@ -52,7 +58,9 @@ public readonly record struct WorldConfig(
         InitialWind: default,
         InitialWeather: Weather.Clear,
         Gravity: 9.81f,
-        StartHoursOfDay: 8f);
+        StartHoursOfDay: 8f,
+        InitialTerrain: TerrainState.FlatDefault,
+        InitialEnvironment: EnvironmentState.Clear);
 
     /// <summary>Make <c>new WorldConfig()</c> match the documented defaults
     /// instead of the CLR's zero-initialized struct state.</summary>
@@ -62,7 +70,9 @@ public readonly record struct WorldConfig(
         InitialWind: default,
         InitialWeather: Weather.Clear,
         Gravity: 9.81f,
-        StartHoursOfDay: 8f)
+        StartHoursOfDay: 8f,
+        InitialTerrain: TerrainState.FlatDefault,
+        InitialEnvironment: EnvironmentState.Clear)
     {
     }
 }

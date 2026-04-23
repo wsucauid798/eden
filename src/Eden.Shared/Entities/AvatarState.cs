@@ -6,8 +6,10 @@ namespace Eden.Shared.Entities;
 /// <summary>
 /// A wire-ready snapshot of an avatar's visible state. Sent from server to
 /// viewers that can see this avatar. Immutable — a new snapshot per update.
-/// Heavy data (full appearance, attachments) is identified by hash; viewers
-/// fetch the detail separately when the hash changes.
+/// <see cref="Transform.Position"/> is the avatar root/feet point in Eden
+/// world coordinates, not the visual centre. Heavy data (full appearance,
+/// attachments) is identified by hash; viewers fetch the detail separately
+/// when the hash changes.
 /// </summary>
 public readonly record struct AvatarState(
     EdenId<UserTag>    UserId,
